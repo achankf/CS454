@@ -1,0 +1,11 @@
+Consider the following possible solutions:
+\begin{itemize}
+\item
+{\bf Server Replication} Using what I can the "Tim Hortons" approach -- setup as many servers (coffee shops) as possible, based on population density and accessibility, so that the servers are close to the clients; hence, network latency over large geographic distance can be reduced.
+\item
+{\bf Caching on the client side} Say there are data that are not changing frequently and the client needs to perform computations that return many values that takes up lots of space.
+For example, the system needs to perform an image search.
+In this case, if the client also has a copy of the images in its local machine, then the server can just return references of the images instead of sending multiple images; thus, bandwidth is reduced, and also latency is reduced.
+\item
+{\bf Maybe using peer-to-peer to simulate caching} Depending on the application's popularity and how often data are updated, a peer-to-peer system may connect a client to another whose location is close to you.
+\end{itemize}
