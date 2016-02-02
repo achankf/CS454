@@ -1,0 +1,80 @@
+\usepackage{amsthm}
+\usepackage{mathtools}
+\DeclarePairedDelimiter{\ceil}{\lceil}{\rceil}
+\DeclarePairedDelimiter{\floor}{\lfloor}{\rfloor}
+\newtheorem{thm}{Theorem}
+\let\oldthm\thm
+\renewcommand{\thm}{\oldthm\normalfont}
+\newtheorem{lemma}[thm]{Lemma}
+\let\oldlemma\lemma
+\renewcommand{\lemma}{\oldlemma\normalfont}
+\newtheorem{claim}[thm]{Claim}
+\let\oldclaim\claim
+\renewcommand{\claim}{\oldclaim\normalfont}
+\newtheorem{coro}[thm]{Corollary}
+\let\oldcoro\coro
+\renewcommand{\coro}{\oldcoro\normalfont}
+\newtheorem{magic}[thm]{Magic}
+\let\oldmagic\magic
+\renewcommand{\magic}{\oldmagic\normalfont}
+\newtheorem{defn}[thm]{Definition}
+\let\olddefn\defn
+\renewcommand{\defn}{\olddefn\normalfont}
+\newcommand{\done}[0]{\hfill\ensuremath{\blacksquare}}
+
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{ifthen,enumerate}
+\usepackage{listings}
+\usepackage{courier}
+\usepackage{pdfpages}
+\usepackage{xcolor}
+\usepackage{bm}
+
+\definecolor{comment}{rgb}{0.12, 0.38, 0.18}
+\usepackage[left=1.5in,top=1.5in,right=1.5in]{geometry}
+\author{Alfred Chan (20392255)}
+
+\lstnewenvironment{algorithm}
+{
+\lstset{
+  language=java,
+  keywordstyle=\color{blue}\bfseries,
+  commentstyle=\color{comment},
+  stringstyle=\ttfamily\color{red!50!brown},
+  numbers=left,
+  showspaces=false,
+  showstringspaces=false,
+  stepnumber=1,
+  basicstyle=\ttfamily,
+  morekeywords={let, each, or ,and, then, cons, push, into, from, to, by, end, do, done, be, in, whenever, set, is, of, not, otherwise, as, on, create, alias, are, taking, that, mark, add, remove, with, output, copy, function, such, find, tokenize, append, sort},
+  frame=single,
+  breaklines=true,
+  lineskip={-1.5pt},
+  tabsize=2,
+        escapeinside={(*@}{@*)}
+}
+}{}
+
+\lstnewenvironment{xml}
+{
+\lstset{
+  language=XML,
+  keywordstyle=\color{blue}\bfseries,
+  commentstyle=\color{comment},
+  stringstyle=\ttfamily\color{red!50!brown},
+  numbers=left,
+  showspaces=false,
+  showstringspaces=false,
+  stepnumber=1,
+  basicstyle=\ttfamily,
+  frame=single,
+  breaklines=true,
+  lineskip={-1.5pt},
+  tabsize=2,
+	escapeinside={(*@}{@*)},
+	morekeywords={dependency,groupId,artifactId}
+}
+}{}
+
+\setlength\parindent{0pt}
