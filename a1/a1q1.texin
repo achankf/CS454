@@ -3,9 +3,6 @@ Consider the following possible solutions:
 \item
 {\bf Reducing distance to servers} Using what I call the ``Tim Hortons" approach -- setup as many servers (coffee shops) as possible, based on population density and accessibility, so that the servers are close to the clients; hence, network latency due to large geographic distance can be reduced.
 \item
-{\bf Reducing the size of response to clients} Say there are data that are not changing frequently and the client needs to perform computations that return many values that take up lots of space, then returning references in the client may reduce bandwidth and latency.
-For example, systems that need to perform an image search.
-In this case, if the client also has a copy of the images in its local machine, then the server can just return references of the images instead of sending multiple images.
-\item
-{\bf Maybe using peer-to-peer to reduce distance} If the application is popular and if the data are updated infrequently, a peer-to-peer system may connect a client to another whose location is close.
+{\bf Reducing the size of requests and responses} Say there are data that are not changing frequently and the server needs to perform computations that return many values that take up lots of space, then sending small messages (such as references) may reduce bandwidth and latency.
+Alternatively, instead of asking for a long list of items from the server, the server may break the results into smaller "pages" for which clients can request one at a time.
 \end{itemize}

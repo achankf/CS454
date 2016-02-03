@@ -1,6 +1,6 @@
 Firstly, it's obvious that the server tries to encapsulate the databases by transforming client requests to database requests.
 Next, since a client request is transformed into 2 different requests to 2 databases, this is clearly horizontal scaling.
-An implication is that the system may try to exploit parallelism to improve performance, whose performance is dictated by the largest database.
+An implication is that the system may try to exploit parallelism to improve performance.
 
 In the given scenario, it is unlikely that the server tries to replicate the database by duplicating client's requests, because the description says that the 2 responses from databases are forwarded to the client.
-There is no reason to expose different databases to the client if the intention is to create replication, since the purpose of database replication is to increases availability for the server.
+There is no reason to expose different databases to the client if the intention is to create replication, since the purpose of database replication is to increases availability for the server, in this case.

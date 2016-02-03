@@ -11,13 +11,13 @@ The protocol headers adds up for large files, so having a smaller header format 
 Also, the file transfer system may want to have its own method of controlling the rate at which packets are sent, like speed throttling in BitTorrent, so TCP's congestion/flow control guarantees may hinder the system.
 \item
 In this case, I would choose UDP.
-Since a private network, according to the Wiki, can have more than $2^{16}$ IP addresses but there are only $2^{16}$ port numbers.
-Thus, it's possible that a system that runs on TCP cannot establish a connection, since each connection takes up a port.
-On the other hand, for UDP only the receiver needs to open a port for listening requests, so the sender can ask as many machines as possible -- though I might want to control the number of concurrent requests.
+Since a private network, according to the Wiki, can have more than $2^{16}$ IP addresses, the client may need to setup lots of TCP connections, which can be expensive.
+On the other hand for UDP, only the receiver needs to open a port for listening requests and the sender can send messages without setting up a connection.
+Though, responses may be lost during the transmission, so some requests may need to be re-sent.
 \item
 It depends on the kind of information.
-If the file consists of text, like HTML, then I would use TCP, for simplicity due to its guarantees.
-On the other hand, if the user can tolerate losses and file size are large or the user requires real-time guarantees, like audio and video, then I would use UDP, due to minimal overhead which provides flexibility to implement the requirements.
+If the file consists of text, like HTML, then I would use TCP, for simplicity and due to its guarantees.
+On the other hand, if the user can tolerate losses or the user requires real-time guarantees, like audio and video, then I would use UDP, due to minimal overhead which provides flexibility to implement the requirements.
 If the system need to show both text and video (like Youtube), I would use both TCP and UDP, with the reasons above.
 \item
 It depends on the kind of procedure calls and the kind of data that are being transferred.

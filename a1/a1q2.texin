@@ -4,5 +4,6 @@ Yes, there are advantages of using synchronous RPC, for example
 If the client needs to know whether a command has executed successfully, say an online payment transaction, then a synchronous RPC call would return the status/error message {\bf after} the remote command is complete.
 Thus, delivering a request and getting the status can be done in one round-trip, unlike asynchronous RPC which only knows that a request is delivered but the status is not known.
 \item
-Also, synchronous RPC blocks the client, which may reduce burdens on servers if the computation is very intensive and the application has lots of clients, since blocking prevents clients from creating new requests.
+Also, synchronous RPC blocks the client.
+If the computation is very instense, preventing many clients from creating new requests may reduce burdens on servers.
 \end{itemize}
