@@ -1,0 +1,20 @@
+\begin{enumerate}[1]
+\item
+This happens when at least one computer is down; in other words, we want that not all computers are {\bf up}.
+The random variable which computers are {\bf up} follows the binomial distribution (n,1-p), so the probability when all computers are up is $(1-p)^n$.
+To take care of the {\bf not} part, we put an ``1-" in the front.
+So,
+\begin{align*}
+p_s = 1-(1-p)^n
+\end{align*}
+\item
+$p_s = 0.2$.
+\item
+$p_s = 0.488$.
+The probably in this case is much greater than when the system has 1 computer.
+This is expected, since the computers are interconnected and more computers mean the service is easier to fail.
+\item
+This happens when all 3 computers are down, so the probability is $p^3 = 0.008$.
+The probability is smaller than a non-distributed system.
+This is also expected, since $\lim_{n \rightarrow \infty} p^n = 0$, which follows the intuition that the more backups a system has the less likely it will fail.
+\end{enumerate}
