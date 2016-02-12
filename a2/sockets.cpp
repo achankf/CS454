@@ -5,6 +5,7 @@
 #include <errno.h>
 #include <iostream>
 #include <netdb.h>
+#include <unistd.h>
 
 int TCP::Sockets::create_socket()
 {
