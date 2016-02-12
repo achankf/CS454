@@ -1,13 +1,13 @@
 all: stringServer stringClient
 
-common.o: common.cpp common.hpp
-	g++ -c common.cpp
+sockets.o: sockets.cpp sockets.hpp
+	g++ -c sockets.cpp
 
-stringServer: string_server.cpp common.o
-	g++ string_server.cpp common.o -o stringServer
+stringServer: string_server.cpp sockets.o
+	g++ string_server.cpp sockets.o -o stringServer
 
-stringClient: string_client.cpp common.o
-	g++ string_client.cpp common.o -o stringClient
+stringClient: string_client.cpp sockets.o
+	g++ string_client.cpp sockets.o -o stringClient
 
 .phony: style
 

@@ -1,8 +1,6 @@
-#include <string>
+#include "sockets.hpp"
 #include <cassert>
-#include "common.hpp"
 #include <iostream>
-#include <sys/select.h>
 
 void cap_first_letter(std::string &str)
 {
@@ -64,7 +62,7 @@ void test_cap()
 int main()
 {
 	test_cap();
-	TCP::Socket socket;
+	TCP::Sockets socket;
 
 	if(socket.bind_and_listen() < 0)
 	{
@@ -83,6 +81,20 @@ int main()
 	while(true)
 	{
 		socket.sync();
+		std::pair<int,TCP::Sockets::Message*> request;
+
+		if(socket.get_available_msg(request) >= 0)
+		{
+			std::string str;
+			TCP::Sockets::Message &msg = *request.second;
+			std::copy(msg.begin(), msg.end(), std::inserter(str, str.end()));
+			// clear the buffer
+			msg = TCP::Sockets::Message();
+			std::cout << "Server:" << str << std::endl;
+			TCP::Sockets::Message &send = socket.get_write_buf(request.first);
+			cap_first_letter(str);
+			std::copy(str.begin(), str.end(), std::inserter(send, send.end()));
+		}
 	}
 
 	// unreachable
