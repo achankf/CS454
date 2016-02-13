@@ -89,6 +89,8 @@ int main()
 	for(std::string line; std::getline(std::cin, line);)
 	{
 		channel.send(server_fd, line);
+		// wait for 2 seconds per request, as required by the assignment specs
+		sleep(2);
 	}
 
 	channel.close();

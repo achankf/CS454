@@ -114,8 +114,6 @@ void StringChannel::send(int dst_fd, std::string &str)
 		std::copy(c_str, c_str + (str.size()+1), std::inserter(send, send.end()));
 	}
 	pthread_mutex_unlock(&this->lock);
-	// wait for 2 seconds per request, as required by the assignment specs
-	sleep(2);
 }
 
 int StringChannel::sync()
