@@ -1,4 +1,5 @@
 #include "sockets.hpp"
+#include "channel.hpp"
 #include <cassert>
 #include <iostream>
 
@@ -76,25 +77,22 @@ int main()
 	socket.get_name(&address, &port);
 	std::cout << "SERVER_ADDRESS " << address << std::endl;
 	std::cout << "SERVER_PORT " << port << std::endl;
-	int i =0;
+	TCP::StringChannel channel(socket);
 
 	while(true)
 	{
-		socket.sync();
-		std::pair<int,TCP::Sockets::Message*> request;
+		channel.sync();
+		std::pair<int,std::string> request;
 
-		if(socket.get_available_msg(request) >= 0)
+		if(channel.receive_any(request) < 0)
 		{
-			std::string str;
-			TCP::Sockets::Message &msg = *request.second;
-			std::copy(msg.begin(), msg.end(), std::inserter(str, str.end()));
-			// clear the buffer
-			msg = TCP::Sockets::Message();
-			std::cout << "Server:" << str << std::endl;
-			TCP::Sockets::Message &send = socket.get_write_buf(request.first);
-			cap_first_letter(str);
-			std::copy(str.begin(), str.end(), std::inserter(send, send.end()));
+			continue;
 		}
+
+		std::cout << request.second << std::endl;
+		// process request and send the result to client
+		cap_first_letter(request.second);
+		channel.send(request.first, request.second);
 	}
 
 	// unreachable

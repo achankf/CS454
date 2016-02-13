@@ -1,13 +1,18 @@
 all: stringServer stringClient
 
+FLAGS = -ggdb -pedantic -Wextra -Wall
+
 sockets.o: sockets.cpp sockets.hpp
-	g++ -c sockets.cpp
+	g++ $(FLAGS) -c sockets.cpp
 
-stringServer: string_server.cpp sockets.o
-	g++ string_server.cpp sockets.o -o stringServer
+channel.o: channel.cpp channel.hpp
+	g++ $(FLAGS) -c channel.cpp
 
-stringClient: string_client.cpp sockets.o
-	g++ string_client.cpp sockets.o -o stringClient
+stringServer: string_server.cpp sockets.o channel.o
+	g++ $(FLAGS) string_server.cpp sockets.o channel.o -o stringServer
+
+stringClient: string_client.cpp sockets.o channel.o
+	g++ $(FLAGS) -pthread string_client.cpp sockets.o channel.o -o stringClient
 
 .phony: style clean
 

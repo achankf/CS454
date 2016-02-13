@@ -1,9 +1,44 @@
 #include <cassert>
 #include <cstdlib>
 #include <iostream>
+#include <iostream>
+#include <pthread.h>
+#include <ctime>
 #include "sockets.hpp"
+#include "channel.hpp"
 
-int main()
+// packed as arguments for handle_requests
+struct SocketReference
+{
+	int server_fd;
+	TCP::Sockets &socket;
+	TCP::StringChannel &channel;
+};
+
+static void *handle_requests(void *data)
+{
+	SocketReference &ref = *static_cast<SocketReference *>(data);
+	int server_fd = ref.server_fd;
+	TCP::StringChannel &channel = ref.channel;
+
+	while(!channel.is_closing())
+	{
+		std::pair<int,std::string> request;
+		channel.sync();
+
+		if(channel.receive_any(request) < 0)
+		{
+			continue;
+		}
+
+		assert(request.first == server_fd);
+		std::cout << "Server: " << request.second << std::endl;
+	}
+
+	return NULL;
+}
+
+static int setup_client(TCP::Sockets &socket)
 {
 	char *hostname = getenv("SERVER_ADDRESS");
 
@@ -11,7 +46,7 @@ int main()
 	{
 		// this should not happen in the student environment
 		assert(false);
-		return 1;
+		return -1;
 	}
 
 	char *port_chars = getenv("SERVER_PORT");
@@ -20,13 +55,17 @@ int main()
 	{
 		// this should not happen in the student environment
 		assert(false);
-		return 1;
+		return -1;
 	}
 
 	int port = atoi(port_chars);
-	std::cout << hostname << " " << port << std::endl;
+	return socket.connect_remote(hostname, port);
+}
+
+int main()
+{
 	TCP::Sockets socket;
-	int server_fd = socket.connect_remote(hostname, port);
+	int server_fd = setup_client(socket);
 
 	if(server_fd < 0)
 	{
@@ -35,33 +74,29 @@ int main()
 		return 1;
 	}
 
-	std::cout << "server_fd: " << server_fd << std::endl;
-	TCP::Sockets::Message &msg = socket.get_write_buf(server_fd);
-	msg.push_back('a');
-	msg.push_back('l');
-	msg.push_back('f');
-	msg.push_back('r');
-	msg.push_back('e');
-	msg.push_back('d');
-	msg.push_back(' ');
-	msg.push_back('c');
-	msg.push_back('h');
-	msg.push_back('a');
-	msg.push_back('n');
+	TCP::StringChannel channel(socket);
+	SocketReference ref = {server_fd, socket, channel};
+	pthread_t net_sync_thread;
 
-	while(true)
+	if(pthread_create(&net_sync_thread, NULL, &handle_requests, static_cast<void*>(&ref)) != 0)
 	{
-		socket.sync();
-		std::pair<int,TCP::Sockets::Message*> request;
+		// should not happen in the student environment
+		assert(false);
+		return 1;
+	}
 
-		if(socket.get_available_msg(request) >= 0)
-		{
-			std::string str;
-			TCP::Sockets::Message &msg = *request.second;
-			std::copy(msg.begin(), msg.end(), std::inserter(str, str.end()));
-			std::cout << "Server: " << str << std::endl;
-			// clear the buffer
-			msg = TCP::Sockets::Message();
-		}
+	// get lines and send them through the channel as requests
+	for(std::string line; std::getline(std::cin, line);)
+	{
+		channel.send(server_fd, line);
+	}
+
+	channel.close();
+
+	if(pthread_join(net_sync_thread, NULL) != 0)
+	{
+		// should not happen in the student environment
+		assert(false);
+		return 1;
 	}
 }

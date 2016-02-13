@@ -44,12 +44,9 @@ int TCP::Sockets::bind_and_listen(int port, int num_listen)
 		return -1;
 	}
 
-	struct sockaddr_in socket_info = {0};
-
+	struct sockaddr_in socket_info;
 	socket_info.sin_family = AF_INET;
-
 	socket_info.sin_addr.s_addr = htonl(INADDR_ANY);
-
 	socket_info.sin_port = htons(port);
 
 	if(bind(temp_fd, (struct sockaddr*) &socket_info, sizeof(socket_info)) < 0)
@@ -151,7 +148,7 @@ int TCP::Sockets::sync()
 			else
 			{
 				// sockets for remote connections
-				int count = read(fd, buf, sizeof(buf));
+				size_t count = read(fd, buf, sizeof(buf));
 
 				if(count == 0)
 				{
@@ -163,7 +160,8 @@ int TCP::Sockets::sync()
 					// copy message to a buffer
 					Message &msg = get_read_buf(fd);
 					std::copy(buf, buf+count, std::inserter(msg, msg.end()));
-					assert(msg.size() == count);
+					// msg could have stored requests that haven't been sent
+					assert(msg.size() >= count);
 				}
 			}
 		}
@@ -178,7 +176,7 @@ int TCP::Sockets::sync()
 
 			if(!msg.empty())
 			{
-				int i;
+				size_t i;
 
 				for(i = 0; i < sizeof buf && !msg.empty(); i++)
 				{
@@ -233,7 +231,7 @@ int TCP::Sockets::connect_remote(char *hostname, int port)
 
 		memcpy(&ip, server_entity->h_addr, server_entity->h_length);
 	}
-	struct sockaddr_in remote_info = {0};
+	struct sockaddr_in remote_info;
 	remote_info.sin_family = AF_INET;
 	remote_info.sin_port = htons(port);
 	memcpy(&remote_info.sin_addr, &ip, sizeof(int));
@@ -253,7 +251,6 @@ int TCP::Sockets::connect_remote(char *hostname, int port)
 
 void TCP::Sockets::disconnect(int fd)
 {
-	std::cout << "disconnecting " << fd << std::endl;
 	Fds::iterator it = this->connected_fds.find(fd);
 	// this method should only be called once per fd
 	assert(it != this->connected_fds.end());
