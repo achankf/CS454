@@ -78,6 +78,8 @@ void TCP::Sockets::get_name(std::string *hostname, int *port) const
 	struct sockaddr_in sin;
 	socklen_t len = sizeof(sin);
 	int retval = getsockname(this->local_fd, (struct sockaddr *)&sin, &len);
+	// supress warning when compiling with NDEBUG
+	(void) retval;
 	// not going to deal with ERRNO
 	assert(retval >= 0);
 	char buf[1024];
@@ -145,6 +147,8 @@ int TCP::Sockets::sync()
 				}
 
 				bool inserted = this->connected_fds.insert(clientfd).second;
+				// supress warning when compiling with NDEBUG
+				(void) inserted;
 				// fds must be unique; something is wrong here
 				assert(inserted);
 			}

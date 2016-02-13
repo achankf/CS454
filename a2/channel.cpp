@@ -73,7 +73,7 @@ int StringChannel::receive_any_helper(std::pair<int,std::string> &ret)
 	{
 		if(request.data.size() == size)
 		{
-#if NDEBUG
+#ifndef NDEBUG
 			// the next character must be the null terminator
 			assert(!msg.empty());
 			unsigned char null_char = msg.front();
@@ -86,6 +86,8 @@ int StringChannel::receive_any_helper(std::pair<int,std::string> &ret)
 			ret.second = request.data;
 			// clear the current buffer for new requests
 			int num_erased = requests.erase(raw_request.first);
+			// suppress warning
+			(void) num_erased;
 			assert(num_erased == 1);
 			return 0;
 		}

@@ -18,7 +18,6 @@ struct SocketReference
 static void *handle_requests(void *data)
 {
 	SocketReference &ref = *static_cast<SocketReference *>(data);
-	int server_fd = ref.server_fd;
 	TCP::StringChannel &channel = ref.channel;
 
 	while(!channel.is_closing())
@@ -31,7 +30,7 @@ static void *handle_requests(void *data)
 			continue;
 		}
 
-		assert(request.first == server_fd);
+		assert(request.first == ref.server_fd);
 		std::cout << "Server: " << request.second << std::endl;
 	}
 

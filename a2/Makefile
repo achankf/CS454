@@ -1,6 +1,6 @@
 all: stringServer stringClient
 
-FLAGS = -ggdb -pedantic -Wextra -Wall
+FLAGS = -DNDEBUG -ggdb -pedantic -Wextra -Wall
 
 sockets.o: sockets.cpp sockets.hpp
 	g++ $(FLAGS) -c sockets.cpp
