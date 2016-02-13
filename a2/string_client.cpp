@@ -1,11 +1,11 @@
+#include "channel.hpp"
+#include "sockets.hpp"
 #include <cassert>
 #include <cstdlib>
+#include <ctime>
 #include <iostream>
 #include <iostream>
 #include <pthread.h>
-#include <ctime>
-#include "sockets.hpp"
-#include "channel.hpp"
 
 // packed as arguments for handle_requests
 struct SocketReference

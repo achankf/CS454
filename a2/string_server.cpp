@@ -1,5 +1,5 @@
-#include "sockets.hpp"
 #include "channel.hpp"
+#include "sockets.hpp"
 #include <cassert>
 #include <iostream>
 

@@ -1,7 +1,9 @@
 #ifndef _channel_hpp_
 #define _channel_hpp_
 
+#include <map>
 #include <pthread.h>
+#include <string>
 
 namespace TCP
 {
