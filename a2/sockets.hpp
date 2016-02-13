@@ -8,6 +8,13 @@
 #include <sys/select.h>
 
 /*
+	this buffer should be large enough to prevent segfaults
+	notice that StringChannel assumes all 4 bytes for the string size
+	to be read at once, so SOCKET_BUF_SIZE must be at least 5
+*/
+#define SOCKET_BUF_SIZE 2048
+
+/*
 	Conventions
 		- methods that create sockets usually returns the fd
 		- methods that return int usually return 2 types of value

@@ -114,7 +114,7 @@ int TCP::Sockets::sync()
 	setup_read_fds(readfds);
 	setup_write_fds(writefds);
 	int max_fd = this->get_max_fd();
-	char buf[2048];
+	char buf[SOCKET_BUF_SIZE];
 	int retval = select(max_fd + 1, &readfds, &writefds, NULL, NULL);
 
 	if(retval < 0 && errno != EINTR)
