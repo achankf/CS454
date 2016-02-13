@@ -1,0 +1,3 @@
+type "make" to create the executables
+
+type "make clean" to clean up whatever that have been built
