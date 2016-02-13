@@ -1,9 +1,10 @@
-#include "sockets.hpp"
 #include "channel.hpp"
-#include <cassert>
+#include "sockets.hpp"
 #include <arpa/inet.h>
-#include <iostream>
+#include <cassert>
 #include <exception>
+#include <iostream>
+#include <unistd.h>
 
 namespace TCP
 {
