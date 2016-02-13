@@ -10,7 +10,7 @@ namespace TCP
 {
 
 StringChannel::StringChannel(Sockets &socket_ref)
-	: socket_ref(socket_ref)
+	: socket_ref(socket_ref), closing(false)
 {
 	if(pthread_mutex_init(&lock, NULL) != 0)
 	{

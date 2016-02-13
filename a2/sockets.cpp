@@ -45,8 +45,11 @@ int TCP::Sockets::bind_and_listen(int port, int num_listen)
 	}
 
 	struct sockaddr_in socket_info;
+
 	socket_info.sin_family = AF_INET;
+
 	socket_info.sin_addr.s_addr = htonl(INADDR_ANY);
+
 	socket_info.sin_port = htons(port);
 
 	if(bind(temp_fd, (struct sockaddr*) &socket_info, sizeof(socket_info)) < 0)
