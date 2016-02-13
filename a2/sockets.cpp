@@ -189,8 +189,9 @@ int TCP::Sockets::sync()
 
 				if(write(fd, buf, i) < 0)
 				{
-					//TODO something is wrong -- needs to debug
-					assert(false);
+					// this can happen when the remote shutdown before the reply was sent
+					// for example, running valgrind can slow the server significantly and this can happen
+					return -1;
 				}
 			}
 		}
