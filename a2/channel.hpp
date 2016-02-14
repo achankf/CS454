@@ -25,6 +25,7 @@ private: // data
 	Requests requests;
 	pthread_mutex_t lock;
 	bool closing;
+	int num_pending;
 
 private: // helpers
 
@@ -34,9 +35,15 @@ private: // helpers
 public:
 	StringChannel(Sockets &socket_ref);
 	~StringChannel();
+
+	// synchronous send/receive
 	int receive_any(std::pair<int,std::string> &ret);
 	void send(int dst_fd, std::string &str);
+
+	// synchronous version of Sockets::sync()
 	int sync();
+
+	// effectively needs an infinite loop; this method does not block
 	bool is_closing();
 	void close();
 };

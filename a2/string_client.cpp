@@ -88,10 +88,15 @@ int main()
 	for(std::string line; std::getline(std::cin, line);)
 	{
 		channel.send(server_fd, line);
-		// wait for 2 seconds per request, as required by the assignment specs
-		sleep(2);
+
+		if(!std::cin.eof())
+		{
+			// wait for 2 seconds per request, as required by the assignment specs
+			sleep(2);
+		}
 	}
 
+	// non-blocking call
 	channel.close();
 
 	if(pthread_join(net_sync_thread, NULL) != 0)

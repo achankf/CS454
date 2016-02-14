@@ -3,14 +3,13 @@
 #include <arpa/inet.h>
 #include <cassert>
 #include <exception>
-#include <iostream>
 #include <unistd.h>
 
 namespace TCP
 {
 
 StringChannel::StringChannel(Sockets &socket_ref)
-	: socket_ref(socket_ref), closing(false)
+	: socket_ref(socket_ref), closing(false), num_pending(0)
 {
 	if(pthread_mutex_init(&lock, NULL) != 0)
 	{
@@ -31,6 +30,14 @@ int StringChannel::receive_any(std::pair<int,std::string> &ret)
 	pthread_mutex_lock(&this->lock);
 	retval = receive_any_helper(ret);
 	pthread_mutex_unlock(&this->lock);
+
+	if(retval >= 0)
+	{
+		// reduce the number of pending request count by 1
+		this->num_pending--;
+		assert(retval >= 0);
+	}
+
 	return retval;
 }
 
@@ -53,11 +60,11 @@ int StringChannel::receive_any_helper(std::pair<int,std::string> &ret)
 		// nsize in network order
 		unsigned int nsize = msg.front() << 24;
 		msg.pop_front();
-		nsize |= (msg.front() << 16) & 0xff;
+		nsize += msg.front() << 16;
 		msg.pop_front();
-		nsize |= (msg.front() << 8) & 0xff;
+		nsize += msg.front() << 8;
 		msg.pop_front();
-		nsize |= msg.front() & 0xff;
+		nsize += msg.front();
 		msg.pop_front();
 		// request.size in host order
 		request.size = ntohl(nsize);
@@ -116,6 +123,8 @@ void StringChannel::send(int dst_fd, std::string &str)
 		std::copy(c_str, c_str + (str.size()+1), std::inserter(send, send.end()));
 	}
 	pthread_mutex_unlock(&this->lock);
+	// increase the number of pending requests by 1
+	this->num_pending++;
 }
 
 int StringChannel::sync()
@@ -129,10 +138,12 @@ int StringChannel::sync()
 bool StringChannel::is_closing()
 {
 	bool retval;
+	int num_pending_temp;
 	pthread_mutex_lock(&this->lock);
 	retval = this->closing;
+	num_pending_temp = this->num_pending;
 	pthread_mutex_unlock(&this->lock);
-	return retval;
+	return retval && num_pending_temp == 0;
 }
 
 void StringChannel::close()
