@@ -109,7 +109,8 @@ int StringChannel::receive_any_helper(std::pair<int,std::string> &ret)
 
 void StringChannel::send(int dst_fd, std::string &str)
 {
-	if (str.size() > std::numeric_limits<unsigned int>::max() - 1) {
+	if(str.size() > std::numeric_limits<unsigned int>::max() - 1)
+	{
 		// the request is too large, don't process it since the header only has 4 bytes
 		return;
 	}
