@@ -1,3 +1,20 @@
 type "make" to create the executables
 
 type "make clean" to clean up whatever that have been built
+
+NOTE:
+- if the client types more than 
+		std::numeric_limits<unsigned int>::max() - 1
+	characters (the -1 is reserved for the null character) before
+	pressing enter (i.e. creating the request), then the request
+	is ignored because the size represented in 4 bytes.
+	As a matter of fact, I ran the following test.
+		function maxx {
+			# below the size limit, but all 4 bytes in the size header
+			# are used
+			perl -E 'say "a" x 1147483647'
+			perl -E 'say "B" x 1147483647'
+		}
+		maxx | ./stringClient
+	It's not likely that the user would like to wait for 20+ minutes
+	before getting the reply from the server.
