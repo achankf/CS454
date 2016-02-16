@@ -2,7 +2,42 @@ type "make" to create the executables
 
 type "make clean" to clean up whatever that have been built
 
-NOTE:
+Here's the code works:
+
+class Sockets:
+	- a class that manages connection multiplexing and buffering
+		- has 2 type of buffers: for reading message and for writing messages
+		- it contains a mapping of file descriptors to buffers, in
+				other words, 1 connection has 2 buffers, and 2 connections
+				has 4 buffers, etc.
+	- all methods are not synchronized and needs external locking
+			to prevent memory corruption
+	- all buffers contain raw bytes; Sockets doesn't interpret
+			any message by any protocol
+	- sync() tries to read all available remote messages to the read
+			buffers and tries to write all remote messages that are in
+			the write buffer
+			- however, Sockets::sync() should not called directly, since
+					Sockets doesn't do locking
+
+class StringChannel:
+	- basically a wrapper of a Sockets object
+	- all methods are protected by a mutex, so StringChannel is
+			basically a monitor
+	- the main functions that StringChannel provides are Send and
+			Receive methods that follows the protocol described by
+			the assignment
+	- provides sync() which forwards the call to Sockets::sync()
+			in a synchronized manner
+
+main():
+	- the client sets up the 2 classes above, a thread that manages
+			Sockets, and a main loop that reads user input
+	- the server sets up the 2 classes above, and it simply repeats
+			the following workflow:
+				Receive -> convert message -> Send
+
+Known Issues (well, not really):
 - if the client types more than 
 		std::numeric_limits<unsigned int>::max() - 1
 	characters (the -1 is reserved for the null character) before
