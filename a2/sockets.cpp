@@ -154,22 +154,29 @@ int TCP::Sockets::sync()
 			}
 			else
 			{
-				// sockets for remote connections
-				size_t count = read(fd, buf, sizeof(buf));
+				// copy message to a buffer
+				Message &msg = get_read_buf(fd);
+				size_t size = std::min(SOCKET_BUF_SIZE - msg.size(), sizeof buf);
 
-				if(count == 0)
+				if(size > 0)
 				{
-					// remote sent EOF -- disconnect remote
-					this->disconnect(fd);
+					// sockets for remote connections
+					size_t count = read(fd, buf, sizeof(buf));
+
+					if(count == 0)
+					{
+						// remote sent EOF -- disconnect remote
+						this->disconnect(fd);
+					}
+					else
+					{
+						std::copy(buf, buf+count, std::inserter(msg, msg.end()));
+						// msg could have stored requests that haven't been sent
+						assert(msg.size() >= count);
+					}
 				}
-				else
-				{
-					// copy message to a buffer
-					Message &msg = get_read_buf(fd);
-					std::copy(buf, buf+count, std::inserter(msg, msg.end()));
-					// msg could have stored requests that haven't been sent
-					assert(msg.size() >= count);
-				}
+
+				// otherwise full; don't read -- we don't want to expand the buffer beyond SOCKET_BUF_SIZE
 			}
 		}
 
