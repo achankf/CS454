@@ -3,6 +3,7 @@
 #include <arpa/inet.h>
 #include <cassert>
 #include <exception>
+#include <limits>
 #include <unistd.h>
 
 namespace TCP
@@ -108,6 +109,11 @@ int StringChannel::receive_any_helper(std::pair<int,std::string> &ret)
 
 void StringChannel::send(int dst_fd, std::string &str)
 {
+	if (str.size() > std::numeric_limits<unsigned int>::max() - 1) {
+		// the request is too large, don't process it since the header only has 4 bytes
+		return;
+	}
+
 	// do the copying here since it doesn't require mutual exclusion
 	const char *c_str = str.c_str();
 	assert(c_str[str.size()] == '\0');
@@ -115,7 +121,7 @@ void StringChannel::send(int dst_fd, std::string &str)
 	{
 		Sockets::Message &send = this->socket_ref.get_write_buf(dst_fd);
 		// format: (4-byte size of message, message)
-		int nsize = htonl(static_cast<int>(str.size() + 1));
+		unsigned int nsize = htonl(static_cast<unsigned int>(str.size() + 1));
 		send.push_back(nsize >> 24);
 		send.push_back(nsize >> 16);
 		send.push_back(nsize >> 8);
