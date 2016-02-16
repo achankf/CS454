@@ -20,4 +20,4 @@ style:
 	astyle --indent=tab --add-one-line-brackets --indent-switches --break-blocks --unpad-paren --delete-empty-lines -A1 *.cpp *.hpp
 
 clean:
-	rm *.o stringServer stringClient
+	rm -f *.o stringServer stringClient
