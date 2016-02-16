@@ -97,6 +97,15 @@ int StringChannel::receive_any_helper(std::pair<int,std::string> &ret)
 			// suppress warning
 			(void) num_erased;
 			assert(num_erased == 1);
+
+			if(msg.empty())
+			{
+				// calling clear() seems to deallocate memory (tested on gcc 4.6.4)
+				// note: msg allocates memory dynamically, so need to shrink memory
+				// when available to prevent internal memory fragmentation
+				msg.clear();
+			}
+
 			return 0;
 		}
 
