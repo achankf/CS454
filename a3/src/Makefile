@@ -1,4 +1,4 @@
-CXFLAGS = $(DFLAG) #-ggdb -pedantic -Wextra -Wall
+CXFLAGS = $(DFLAG) $(OFLAG) $(WFLAG)
 HEADERS = $(shell find -name "*.hpp")
 
 all: librpc.a binder
