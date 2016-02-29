@@ -1,6 +1,8 @@
 #include "common.hpp"
 #include "name_service.hpp" // struct Name
+#include "debug.hpp"
 #include "sockets.hpp"
+#include <arpa/inet.h>
 #include <cassert>
 #include <cstdlib>
 #include <cstring>
@@ -44,29 +46,34 @@ int connect_to_binder(TCP::Sockets &sockets)
 static Name sockaddr_in_to_name(struct sockaddr_in &sin)
 {
 	Name ret;
-	// copy the ip address (in network byte order) into an int
-	memcpy(&sin.sin_addr, &ret.ip, sizeof(ret.ip));
 	// convert the ip address into host byte order
-	ret.ip = ntohl(ret.ip);
+	ret.ip = ntohl(sin.sin_addr.s_addr);
 	ret.port = ntohs(sin.sin_port);
 	return ret;
 }
 
 void get_hostname(int fd, std::string &hostname, Name &name)
 {
-	struct sockaddr_in sin;
-	socklen_t len = sizeof(sin);
-	int retval = getsockname(fd, (struct sockaddr *)&sin, &len);
-	// supress warning when compiling with NDEBUG
-	(void) retval;
-	// not going to deal with ERRNO
-	assert(retval >= 0);
-	name = sockaddr_in_to_name(sin);
-	char buf[1024];
-	retval = gethostname(buf, sizeof(buf));
-	// not going to deal with ERRNO
-	assert(retval >= 0);
-	hostname = std::string(buf);
+	// get ip address and port number
+	{
+		struct sockaddr_in sin;
+		socklen_t len = sizeof(sin);
+		int retval = getsockname(fd, (struct sockaddr *)&sin, &len);
+		// supress warning when compiling with NDEBUG
+		(void) retval;
+		// not going to deal with ERRNO
+		assert(retval >= 0);
+		name = sockaddr_in_to_name(sin);
+	}
+	// get hostname
+	{
+		char buf[1024];
+		int retval = gethostname(buf, sizeof(buf));
+		(void) retval;
+		// not going to deal with ERRNO
+		assert(retval >= 0);
+		hostname = std::string(buf);
+	}
 }
 
 int get_peer_info(int fd, Name &ret)
@@ -74,43 +81,57 @@ int get_peer_info(int fd, Name &ret)
 	struct sockaddr_in sin;
 	socklen_t len = sizeof(sin);
 
-	if(getsockname(fd, (struct sockaddr *)&sin, &len) < 0)
+	if(getpeername(fd, (struct sockaddr *)&sin, &len) < 0)
 	{
-		//TODO
+		// should not happen in the student environment?
 		assert(false);
 		return -1;
 	}
 
+	// assign name
 	ret = sockaddr_in_to_name(sin);
 	return 0;
 }
 
-std::stringstream &push_u32(std::stringstream &ss, unsigned int val)
+void push_u32(std::stringstream &ss, unsigned val)
 {
 	val = htonl(val);
-	ss << (unsigned char)(val >> 24);
-	ss << (unsigned char)(val >> 16);
-	ss << (unsigned char)(val >> 8);
-	ss << (unsigned char)val;
-	return ss;
+	ss.write((char*)&val, 4);
 }
 
-unsigned int pop_uint32(std::stringstream &ss)
+unsigned pop_u32(std::stringstream &ss)
 {
 	// assumes ss contains the valid bytes
-	unsigned char b1, b2, b3, b4;
-	ss >> b1 >> b2 >> b3 >> b4;
-	unsigned int ret = 0;
-	ret += b1 << 24;
-	ret += b1 << 16;
-	ret += b1 << 8;
-	ret += b1;
+	unsigned ret;
+	ss.read((char*)&ret, 4);
 	return ntohl(ret);
 }
 
-std::string get_unformatted(std::stringstream &ss, size_t size)
+std::string raw_read(std::stringstream &ss, size_t size)
 {
-	char buf[size+1];
-	ss.get(buf, sizeof buf);
-	return buf;
+	char *buf = new char[size+1];
+
+	if(!ss.read(buf, size))
+	{
+		assert(false);
+		// partially read... bug...
+	}
+
+	std::string ret;
+	// copy character-by-character
+	std::copy(buf, (buf + size), std::inserter(ret, ret.end()));
+	delete []buf;
+	return ret;
+}
+
+void push_string(std::stringstream &ss, const std::string &str)
+{
+	push_u32(ss, str.size());
+	ss << str;
+}
+
+std::string pop_string(std::stringstream &ss)
+{
+	unsigned size = pop_u32(ss);
+	return raw_read(ss, size);
 }

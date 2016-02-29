@@ -32,7 +32,7 @@ public: // typedefs
 		unsigned int ns_version;
 		unsigned int size;
 		MessageType msg_type;
-		std::string message;
+		std::string str;
 	};
 	struct Request
 	{
@@ -58,7 +58,7 @@ public: // methods
 	int send_ns_update(int remote_fd);
 	int send_terminate(int binder_fd);
 
-	int reply_hello(int remote_fd);
+	int reply_hello(int remote_fd, unsigned log_since);
 
 	int receive_any(Request &ret);
 

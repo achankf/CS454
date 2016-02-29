@@ -17,9 +17,9 @@ int Postman::send(int remote_fd, Message &msg)
 {
 	TCP::Sockets::Buffer &buf = this->sockets.get_write_buf(remote_fd);
 	push_uint(buf, msg.ns_version);
-	push_uint(buf, msg.size);
 	push_uint(buf, msg.msg_type);
-	const char *msg_cstr = msg.message.c_str();
+	push_uint(buf, msg.size);
+	const char *msg_cstr = msg.str.c_str();
 	std::copy(msg_cstr, (msg_cstr + msg.size), std::inserter(buf, buf.end()));
 	return this->sockets.flush(remote_fd);
 }
@@ -29,7 +29,7 @@ int Postman::send_register(int binder_fd, int server_id, int port, Function &fun
 	std::stringstream buf;
 	buf << htonl(server_id)
 	    << htonl(port)
-	    << to_string(func);
+	    << to_net_string(func);
 	Message msg = to_message(REGISTER, buf.str());
 	return this->send(binder_fd, msg);
 }
@@ -57,12 +57,14 @@ int Postman::send_terminate(int binder_fd)
 
 int Postman::receive_any(Request &ret)
 {
-	if (this->sockets.sync() < 0) {
+	if(this->sockets.sync() < 0)
+	{
 		// some error occurred
 		//TODO ???
 		assert(false);
 		return -1;
 	}
+
 	std::pair<int, TCP::Sockets::Buffer*> raw_req;
 
 	if(this->sockets.get_available_msg(raw_req) < 0)
@@ -76,12 +78,12 @@ int Postman::receive_any(Request &ret)
 	assert(read_buf.size() > 0);
 	Message &req_buf = this->asmBuf[fd];
 
-	if(req_buf.message.empty())
+	if(req_buf.str.empty())
 	{
 		// this is a new request, so the header (8 bytes) must be read
 		pop_uint(read_buf, req_buf.ns_version);
-		pop_uint(read_buf, req_buf.size);
 		pop_uint(read_buf, (unsigned int &)req_buf.msg_type);
+		pop_uint(read_buf, req_buf.size);
 	}
 
 	assert(req_buf.size > 0);
@@ -93,7 +95,7 @@ int Postman::receive_any(Request &ret)
 		unsigned char c = read_buf.front();
 		read_buf.pop_front();
 
-		if(req_buf.message.size() == size_minus_one)
+		if(req_buf.str.size() == size_minus_one)
 		{
 			int retval = -1;
 
@@ -111,7 +113,7 @@ int Postman::receive_any(Request &ret)
 			return retval;
 		}
 
-		req_buf.message.push_back(c);
+		req_buf.str.push_back(c);
 	}
 
 	return -1;
@@ -124,7 +126,7 @@ int Postman::sync()
 
 Postman::Message Postman::to_message(Postman::MessageType type, std::string msg)
 {
-	Postman::Message ret = {this->ns.get_version(), msg.size() + 1, type, msg.c_str()};
+	Postman::Message ret = {this->ns.get_version(), msg.size() + 1, type, msg};
 	return ret;
 }
 
@@ -133,11 +135,21 @@ const TCP::Sockets::Fds &Postman::all_connected() const
 	return this->sockets.all_connected();
 }
 
-int Postman::reply_hello(int remote_fd)
+#include <iomanip>
+int Postman::reply_hello(int remote_fd, unsigned log_since)
 {
 #ifndef NDEBUG
 	std::cout << "replying hello to fd:" << remote_fd << std::endl;
 #endif
-	Message msg = to_message(GOOD_TO_SEE_YOU, "");
+	std::string delta_logs = ns.get_logs(log_since);
+	Message msg = to_message(GOOD_TO_SEE_YOU, delta_logs);
+	std::cout << std::setfill('0');
+
+	for(size_t i = 0; i < msg.str.size(); i++)
+	{
+		std::cout << " " << std::hex << std::setw(2) << ((unsigned)msg.str[i] &0xff);
+	}
+
+	std::cout << std::endl << std::dec;
 	return send(remote_fd, msg);
 }

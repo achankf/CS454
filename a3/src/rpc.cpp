@@ -1,4 +1,5 @@
 #include "common.hpp"
+#include "debug.hpp"
 #include "name_service.hpp"
 #include "postman.hpp"
 #include "rpc.h"
@@ -30,21 +31,21 @@ bool hello_sent = false;
 
 static int wait_for_hello_reply()
 {
-	// busy-wait until "good to see you" reply is back
 	Postman::Request ret;
 
+	// busy-wait until "good to see you" reply is back
 	while(postman.receive_any(ret) < 0);
 
 	assert(ret.message.ns_version > 0);
-	if (ret.fd == binder_fd && ret.message.msg_type == Postman::GOOD_TO_SEE_YOU) {
-#ifndef NDEBUG
-	std::cout << "acknowledge greeting" << std::endl;
-#endif
+
+	if(ret.fd == binder_fd && ret.message.msg_type == Postman::GOOD_TO_SEE_YOU)
+	{
+		ns.apply_logs(ret.message.str);
 		return 0;
 	}
-#ifndef NDEBUG
-	std::cout << "bad greeting" << std::endl;
-#endif
+
+	// hello reply did not come from the binder?
+	assert(false);
 	return -1;
 }
 
@@ -60,6 +61,9 @@ int rpcInit()
 	}
 
 	get_hostname(server_fd, server_hostname, server_name);
+#ifndef NDEBUG
+	std::cout << "Server fd:" << server_fd << " ip:" << to_ipv4_string(server_name.ip) << " port:" << server_name.port << std::endl;
+#endif
 	binder_fd = connect_to_binder(sockets);
 	// should not fail in student environment
 	assert(binder_fd >= 0);
@@ -74,6 +78,7 @@ int rpcInit()
 
 	if(wait_for_hello_reply() < 0)
 	{
+		// hello reply did not come from the binder?
 		assert(false);
 		return -1;
 	}

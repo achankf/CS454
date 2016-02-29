@@ -99,7 +99,7 @@ int handle_request(Postman &postman, NameService &ns, FdBookKeeper &keeper, Post
 #ifndef NDEBUG
 			std::cout << "Hello: fd:" << fd << " id:" << id << std::endl;
 #endif
-			return postman.reply_hello(fd);
+			return postman.reply_hello(fd, remote_ns_version);
 		}
 
 		case Postman::UPDATE_NS:
@@ -138,6 +138,7 @@ int main()
 			debug_print_type(req);
 			handle_request(postman, ns, keeper, req);
 		}
+
 		keeper.cleanup_disconnected(ns, postman.all_connected());
 	}
 }

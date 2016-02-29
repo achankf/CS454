@@ -22,8 +22,11 @@ int get_peer_info(int fd, Name &ret);
 
 int connect_to_binder(TCP::Sockets &sockets);
 
-std::stringstream &push_u32(std::stringstream &ss, unsigned int val);
-unsigned int pop_uint32(std::stringstream &ss);
-std::string get_unformatted(std::stringstream &ss, size_t size);
+// buffer-related helpers
+std::string pop_string(std::stringstream &ss);
+std::string raw_read(std::stringstream &ss, size_t size);
+unsigned pop_u32(std::stringstream &ss);
+void push_string(std::stringstream &ss, const std::string &str);
+void push_u32(std::stringstream &ss, unsigned val);
 
 #endif
