@@ -6,6 +6,7 @@
 #include <cstring>
 #include <iostream>
 #include <netdb.h>
+#include <unistd.h>
 
 void print_host_info(int fd, const char *prefix)
 {
