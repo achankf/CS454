@@ -10,111 +10,271 @@
 #include <iostream>
 #endif
 
-TCP::Sockets sockets;
-NameService ns;
-Postman postman(sockets, ns);
+// ============== class definitions  ==============
 
-// server
-int server_fd = -1;
-int server_id = -1;
-std::string server_hostname;
-Name server_name;
-
-// binder
-int binder_fd = -1;
-const int binder_id = 0;
-std::string binder_hostname;
-Name binder_name;
-
-// each client/server needs to greet the binder with a hello request at the beginning
-bool hello_sent = false;
-
-static int wait_for_hello_reply()
+#if 0
+struct RpcTrigger : public TCP::Sockets::Trigger
 {
-	Postman::Request ret;
+	virtual void when_connected(int fd);
+	virtual void when_disconnected(int fd);
+};
+#endif
 
-	// busy-wait until "good to see you" reply is back
-	while(postman.receive_any(ret) < 0);
+// ============== global variables ==============
 
-	assert(ret.message.ns_version > 0);
+class Global
+{
+public: //public
 
-	if(ret.fd == binder_fd && ret.message.msg_type == Postman::GOOD_TO_SEE_YOU)
+	// network structures
+	NameService ns;
+	//RpcTrigger trigger;
+	TCP::Sockets sockets;
+	Postman postman;
+
+	// server (only set when the process is a server)
+	int server_fd;
+
+	// binder (used by both clients and servers)
+	int binder_fd;
+
+public: //methods
+	Global()
+		: postman(sockets, ns),
+		  server_fd(-1),
+		  binder_fd(-1)
 	{
-		ns.apply_logs(ret.message.str);
-		return 0;
+		// this constructor should not throw exception
+		//this->sockets.set_trigger(&trigger);
+		this->sockets.set_buffer(&postman);
 	}
+};
 
-	// hello reply did not come from the binder?
-	assert(false);
-	return -1;
-}
+Global g;
+
+// ============== codes below ==============
 
 int rpcInit()
 {
-	server_fd = sockets.bind_and_listen();
+#ifndef NDEBUG
+	std::cout << "RPC INIT" << std::endl;
+#endif
+	g.server_fd = g.sockets.bind_and_listen();
 
-	if(server_fd < 0)
+	if(g.server_fd < 0)
 	{
 		// should not happen in the student environment
 		assert(false);
 		return -1;
 	}
 
-	get_hostname(server_fd, server_hostname, server_name);
+	int port;
+	std::string server_hostname;
+	get_hostname(g.server_fd, server_hostname, port);
 #ifndef NDEBUG
-	std::cout << "Server fd:" << server_fd << " ip:" << to_ipv4_string(server_name.ip) << " port:" << server_name.port << std::endl;
+	print_host_info(g.server_fd,"SERVER");
 #endif
-	binder_fd = connect_to_binder(sockets);
-	// should not fail in student environment
-	assert(binder_fd >= 0);
-	get_peer_info(binder_fd, binder_name);
+	g.binder_fd = connect_to_binder(g.sockets);
 
-	if(postman.send_hello(binder_fd) < 0)
+	if(g.binder_fd < 0)
 	{
-		// this must be a bug, since the server is connected to the binder
-		assert(false);
+		// cannot connect to the binder
 		return -1;
 	}
 
-	if(wait_for_hello_reply() < 0)
+	if(g.postman.send_iam_server(g.binder_fd, port) < 0)
 	{
-		// hello reply did not come from the binder?
-		assert(false);
+		// should not happen...
 		return -1;
 	}
 
-	hello_sent = true;
+	Postman::Request req;
+	Timer timer; // double-timer
+
+	while(g.postman.sync_and_receive_any(req) < 0)
+	{
+		if(req.message.msg_type == Postman::OK_SERVER)
+		{
+			break;
+		}
+
+		// else must be broadcasts for new server nodes (which we don't care since we will get the latest logs)
+
+		if(timer.is_timeout())
+		{
+			// should not happen
+			return -1;
+		}
+	}
+
+	std::stringstream ss(req.message.str);
+	g.ns.apply_logs(ss);
 	return 0;
 }
 
 int rpcCall(char* name, int* argTypes, void** args)
 {
+#ifndef NDEBUG
+	std::cout << "RPC CALL" << std::endl;
+#endif
+
+	if(g.binder_fd < 0)
+	{
+		g.binder_fd = connect_to_binder(g.sockets);
+
+		if(g.binder_fd < 0)
+		{
+			// cannot connect to the binder -- should not happen
+			assert(false);
+			return -1;
+		}
+	}
+
 	Function func = to_function(name, argTypes);
-	return postman.send_call(server_fd, func, args);
+
+	if(g.postman.send_loc_request(g.binder_fd, func) < 0)
+	{
+		// didn't send successfully
+		return -1;
+	}
+
+	Postman::Request req;
+
+	if(g.postman.sync_and_receive_any(req) < 0)
+	{
+		// didn't get any response/timeout
+		return -1;
+	}
+
+	std::stringstream ss(req.message.str);
+
+	switch(req.message.msg_type)
+	{
+		case Postman::LOC_SUCCESS:
+		{
+			unsigned target_id = pop_i32(ss);
+			g.ns.apply_logs(ss);
+			Name name;
+
+			if(g.ns.resolve(target_id, name) < 0)
+			{
+				// cannot happen -- the database is synced with the binder
+				assert(false);
+				return -1;
+			}
+
+			int listen_port; // name.port is for sending msg, not listening
+
+			if(g.ns.get_listen_port(target_id, listen_port) < 0)
+			{
+				// cannot happen -- the database is synced with the binder
+				assert(false);
+				return -1;
+			}
+
+			int target_fd = g.sockets.connect_remote(name.ip, listen_port);
+
+			if(target_fd < 0)
+			{
+				// this can happen when the server (immediately) after the binder replies
+				assert(false);
+				return -1;
+			}
+
+			return g.postman.send_execute(target_fd, func, args);
+		}
+
+		case Postman::LOC_FAILURE:
+		{
+			Postman::ErrorNo err = static_cast<Postman::ErrorNo>(pop_i32(ss));
+
+			switch(err)
+			{
+				case Postman::NO_AVAILABLE_SERVER:
+					g.ns.apply_logs(ss);
+					// do something?
+					return -1;
+
+				default:
+					// not supposed to happen
+					assert(false);
+					return -1;
+			}
+		}
+
+		default:
+			// invalid command
+			return -1;
+	}
+
+	// unreachable
+	assert(false);
+	return -1;
 }
 
 int rpcCacheCall(char* name, int* argTypes, void** args)
 {
+	(void)args;
+	//TODO
+	assert(false);
+	if(g.binder_fd >= 0)
+	{
+		// cannot connect to the binder -- should not happen
+		return -1;
+	}
+
+	Function func = to_function(name, argTypes);
 	return -1;
 }
 
 int rpcRegister(char* name, int* argTypes, skeleton f)
 {
+	//TODO make a local database of skeletons in the server
+	(void)f;
+#ifndef NDEBUG
+	std::cout << "RPC REGISTER" << std::endl;
+#endif
 	// only the server calls this methods, and hello is sent during init()
-	assert(hello_sent);
 	Function func = to_function(name, argTypes);
-	print_function(func);
-	//postman.send_register(binder_fd, server_id, server_port, func);
+
+	if(g.postman.send_register(g.binder_fd, func) < 0)
+	{
+		// cannot send the request
+		return -1;
+	}
+
+	Postman::Request req;
+
+	if(g.postman.sync_and_receive_any(req) < 0 || req.message.msg_type != Postman::REGISTER_DONE)
+	{
+		// cannot get a reply or there is a bug (someone sent an invalid reply)
+		return -1;
+	}
+
+	// reply contains nothing but log deltas
+	std::stringstream ss(req.message.str);
+	g.ns.apply_logs(ss);
 	return 0;
 }
 
 int rpcExecute()
 {
-	// only the server calls this methods, and hello is sent during init()
-	assert(hello_sent);
+#ifndef NDEBUG
+	std::cout << "RPC EXECUTE" << std::endl;
+#endif
 
+	// only the server calls this methods, and hello is sent during init()
 	while(true)
 	{
+		Postman::Request req;
+
+		if(g.postman.sync_and_receive_any(req) >= 0)
+		{
+			//TODO
+#ifndef NDEBUG
+			std::cout << "got something in rpcExecute()" << std::endl;
+#endif
+		}
 	}
 
 	return -1;
@@ -122,5 +282,24 @@ int rpcExecute()
 
 int rpcTerminate()
 {
+#ifndef NDEBUG
+	std::cout << "RPC TERMINATE" << std::endl;
+#endif
 	return -1;
 }
+
+#if 0
+void RpcTrigger::when_connected(int fd)
+{
+#ifndef NDEBUG
+	std::cout << "connection created for fd:" << fd << std::endl;
+#endif
+}
+
+void RpcTrigger::when_disconnected(int fd)
+{
+#ifndef NDEBUG
+	std::cout << "connection ended for fd:" << fd << std::endl;
+#endif
+}
+#endif

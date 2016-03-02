@@ -5,6 +5,6 @@ BINDER_PORT=$2
 export BINDER_ADDRESS
 export BINDER_PORT
 
-gdb $TEST/server
+gdb $TEST/client1
 
 echo $?

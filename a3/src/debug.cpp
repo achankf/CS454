@@ -1,30 +1,31 @@
 #include "debug.hpp"
 #include "name_service.hpp"
 #include "rpc.h"
+#include <arpa/inet.h>
 #include <cassert>
-#include <sstream>
-
-#ifndef NDEBUG
 #include <iostream>
-#endif
+#include <sstream>
 
 void debug_print_type(const Postman::Request &req)
 {
-#ifndef NDEBUG
 	std::string temp;
 
 	switch(req.message.msg_type)
 	{
-		case Postman::HELLO:
-			temp = "Request: HELLO";
+		case Postman::I_AM_SERVER:
+			temp = "Request: I_AM_SERVER";
 			break;
 
-		case Postman::GOOD_TO_SEE_YOU:
-			temp = "Reply: GOOD_TO_SEE_YOU";
+		case Postman::OK_SERVER:
+			temp = "Request: OK_SERVER";
 			break;
 
 		case Postman::REGISTER:
 			temp = "Request: REGISTER";
+			break;
+
+		case Postman::REGISTER_DONE:
+			temp = "Request: REGISTER_DONE";
 			break;
 
 		case Postman::LOC_REQUEST:
@@ -54,15 +55,9 @@ void debug_print_type(const Postman::Request &req)
 		case Postman::TERMINATE:
 			temp = "Request: TERMINATE";
 			break;
-
-		default:
-			// unreachable
-			assert(false);
-			break;
 	}
 
 	std::cout << temp << std::endl;
-#endif
 }
 
 std::string format_arg(int arg_type)
@@ -112,9 +107,9 @@ std::string format_arg(int arg_type)
 		ss << "output ";
 	}
 
-	size_t size;
+	size_t size = get_arg_car(arg_type);
 
-	if(is_arg_array(arg_type, size))
+	if(size > 0)
 	{
 		ss << "array(" << size << ") ";
 	}
@@ -127,7 +122,7 @@ std::string format_arg(int arg_type)
 	return ss.str();
 }
 
-void print_function(Function &func)
+void print_function(const Function &func)
 {
 	std::cout << func.name << std::endl;
 
@@ -141,10 +136,19 @@ void print_function(Function &func)
 
 std::string to_ipv4_string(int bin)
 {
+	bin = ntohl(bin);
 	std::stringstream ss;
 	ss << (unsigned)((bin >> 24) & 0xff) << '.'
 	   << (unsigned)((bin >> 16) & 0xff) << '.'
 	   << (unsigned)((bin >> 8) & 0xff) << '.'
 	   << (unsigned)(bin & 0xff);
+	return ss.str();
+}
+
+std::string to_format(Name &name)
+{
+	std::stringstream ss;
+	ss << "ip:" << to_ipv4_string(name.ip)
+	   << " port:" << name.port;
 	return ss.str();
 }

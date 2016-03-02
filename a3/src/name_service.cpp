@@ -6,67 +6,148 @@
 #include <cassert>
 #include <exception>
 #include <iostream>
+#include <iterator>
 
 // utility methods
 // logs
-std::string to_net_string(const NameService::LogEntry &entry);
-NameService::LogEntry pop_entry(std::stringstream &ss);
+static NameService::LogEntry pop_entry(std::stringstream &ss);
+static void push(std::stringstream &ss, const NameService::LogEntry &entry);
 
-const NameIds &NameService::suggest(const Function &func)
+void NameService::cleanup_disconnected_ids(NameIds &ids)
 {
-	return this->func_to_ids[func];
+	// clean up disconnected nodes to avoid making bad decisions
+	NameIds::iterator it = ids.begin();
+
+	while(it != ids.end())
+	{
+		if(id_to_name.find(*it) == id_to_name.end())
+		{
+			// not found in the id_to_name mapping -- absolutely disconnected
+			NameIds::iterator it_temp = it;
+			++it;
+			ids.erase(it_temp);
+		}
+		else
+		{
+			// this node is still perceived as connected (accurate up to the logs)
+			++it;
+		}
+	}
 }
 
-void NameService::register_fn(const Function &func, const Name &name)
+int NameService::get_listen_port(unsigned id, int &ret) const
 {
-	unsigned id;
-	int ret = this->resolve(name, id);
-	// > 0 because binder don't register any function
-	assert(ret >= 0);
-	assert(id > 0);
-	Function signiture = func.to_signiture();
-	this->func_to_ids[signiture].insert(id);
+	ListenPortMap::const_iterator it = this->id_to_listen_ports.find(id);
+
+	if(it == this->id_to_listen_ports.end())
+	{
+		// not a server
+		return -1;
+	}
+
+	ret = it->second;
+	return 0;
+}
+
+void NameService::add_listen_port(unsigned id, int port)
+{
+#ifndef NDEBUG
+	std::cout << "registering listen port " << port << " for node id:" << id << std::endl;
+#endif
+	std::pair<ListenPortMap::iterator, bool> ret = this->id_to_listen_ports.insert(std::make_pair(id, port));
+	(void) ret;
+	// must not have inserted port with the same id previously
+	assert(ret.second);
 	// add a log entry
-	std::stringstream buf;
-	push_u32(buf, id);
-	buf << to_net_string(signiture);
-	LogEntry entry = {NEW_FUNC, buf.str()};
+	std::stringstream ss;
+	push_i32(ss, id);
+	push_i32(ss, port);
+	LogEntry log = { LISTEN_PORT, ss.str() };
+	this->logs.push_back(log);
+}
+
+int NameService::suggest(const Function &func, unsigned &ret)
+{
+	NameIdsWithPivot &pair = this->func_to_ids[func];
+	NameIds &ids = pair.first;
+	cleanup_disconnected_ids(ids);
+
+	if(ids.size() == 0)
+	{
+		// no suggestion
+		return -1;
+	}
+
+	// update the pivot
+	pair.second = (pair.second + 1) % ids.size();
+	// get the k-th element (pivot)
+	NameIds::iterator it = ids.begin();
+	std::advance(it, pair.second);
+	// pivot is between [0,ids.size()]; therefore it must point to something
+	assert(it != ids.end());
+	ret = *it;
+	return 0;
+}
+
+void NameService::register_fn(unsigned id, const Function &func)
+{
+#ifndef NDEBUG
+	std::cout << "registering function for node id:" << id << std::endl;
+#endif
+	// insert the entry
+	Function signiture = func.to_signiture();
+	NameIds &ids = this->func_to_ids[signiture].first;
+	ids.insert(id);
+	// add a log entry
+	std::stringstream ss;
+	push_i32(ss, id);
+	push(ss, func);
+	LogEntry entry = {NEW_FUNC, ss.str()};
 	this->logs.push_back(entry);
 }
 
-std::string to_net_string(const Function &func)
+void push(std::stringstream &ss, const Function &func)
 {
 	assert(func.name.size() <= MAX_FUNC_NAME_LEN);
 	unsigned char name_size = func.name.size();
 	std::string ret;
-	std::stringstream buf;
-	buf << name_size;
-	push_u32(buf, func.types.size());
-	buf << func.name;
+	ss << name_size;
+	push_i32(ss, func.types.size());
+	ss << func.name;
 
 	for(size_t i = 0; i < func.types.size(); i++)
 	{
-		push_u32(buf, func.types[i]);
+		push_i32(ss, func.types[i]);
 	}
-
-	return buf.str();
 }
 
-Function func_from_string(const std::string &str)
+Function func_from_sstream(std::stringstream &ss)
 {
-	Function func;
-	std::stringstream buf(str);
 	unsigned char size;
-	buf >> size;
-	unsigned num_args = pop_u32(buf);
-	func.name = raw_read(buf, size);
+	ss >> size;
+	unsigned num_args = pop_i32(ss);
+	Function func;
+	func.name = raw_read(ss, size);
 
 	for(size_t i = 0; i < num_args; i++)
 	{
-		func.types.push_back(pop_u32(buf));
+		func.types.push_back(pop_i32(ss));
 	}
 
 	return func;
+}
+
+int NameService::resolve(unsigned id, Name &ret) const
+{
+	RightMap::const_iterator it = this->id_to_name.find(id);
+
+	if(it == this->id_to_name.end())
+	{
+		return -1;
+	}
+
+	ret = it->second;
+	return 0;
 }
 
 int NameService::resolve(const Name &name, unsigned &ret) const
@@ -82,24 +163,22 @@ int NameService::resolve(const Name &name, unsigned &ret) const
 	return 0;
 }
 
-unsigned NameService::register_name(unsigned id, const Name &name)
+void NameService::register_name(unsigned id, const Name &name)
 {
 #ifndef NDEBUG
-	std::cout << "Registering name id:" << id << " ip:" << to_ipv4_string(name.ip) << " port:" << name.port << std::endl;
+	std::cout << "Registering name id:" << id << " ip:" << to_ipv4_string(name.ip) << "(" << (unsigned)name.ip << ") port:" << name.port << std::endl;
 #endif
 	// this is an internal method which is called to insert a NEW name
-	unsigned not_used;
 	this->id_to_name.insert(std::make_pair(id, name));
 	assert(this->name_to_id.find(name) == this->name_to_id.end());
 	this->name_to_id.insert(std::make_pair(name,id));
 	// add a new log entry
 	std::stringstream ss;
-	push_u32(ss, id);
-	push_u32(ss, name.ip);
-	push_u32(ss, name.port);
+	push_i32(ss, id);
+	push_i32(ss, name.ip);
+	push_i32(ss, name.port);
 	LogEntry log = { NEW_NODE, ss.str() };
 	this->logs.push_back(log);
-	return id;
 }
 
 void NameService::remove_name(unsigned id)
@@ -109,6 +188,7 @@ void NameService::remove_name(unsigned id)
 	assert(it != this->id_to_name.end());
 	this->name_to_id.erase(it->second);
 	this->id_to_name.erase(id);
+	this->id_to_listen_ports.erase(id);
 }
 
 void NameService::kill(unsigned id)
@@ -119,7 +199,7 @@ void NameService::kill(unsigned id)
 	this->remove_name(id);
 	// add a log entry
 	std::stringstream buf;
-	push_u32(buf, id);
+	push_i32(buf, id);
 	LogEntry entry = { KILL_NODE, buf.str() };
 	logs.push_back(entry);
 }
@@ -145,15 +225,14 @@ bool operator< (const Function& lhs, const Function& rhs)
 {
 	Function lhs_sig = lhs.to_signiture();
 	Function rhs_sig = rhs.to_signiture();
-	// name can be the same, but arguments (data, scalar vs array) must be different
-	return lhs_sig.name <= rhs_sig.name && lhs.types < rhs.types;
+	return std::make_pair(lhs_sig.name, lhs_sig.types)
+	       < std::make_pair(rhs_sig.name, rhs_sig.types);
 }
 
 // needed for std::map
 bool operator< (const Name& lhs, const Name& rhs)
 {
-	// i.e. can be called from the same machine, but the port must be unique
-	return lhs.ip <= rhs.ip && lhs.port < rhs.port;
+	return std::make_pair(lhs.ip, lhs.port) < std::make_pair(rhs.ip, rhs.port);
 }
 
 Function to_function(const char *name_cstr, int *argTypes)
@@ -195,10 +274,10 @@ bool is_arg_output(int arg_type)
 	return arg_type & (1 << ARG_OUTPUT);
 }
 
-bool is_arg_array(int arg_type, size_t &size)
+size_t get_arg_car(int arg_type)
 {
-	size = static_cast<unsigned short>(arg_type);
-	return size > 0;
+	// truncate to lower 16 bits
+	return static_cast<unsigned short>(arg_type);
 }
 
 int get_arg_data_type(int arg_type)
@@ -216,33 +295,28 @@ std::string NameService::get_logs(unsigned since) const
 #ifndef NDEBUG
 	std::cout << "sending log (num_delta:" << num_delta << ")" << std::endl;
 #endif
-	push_u32(ss, num_delta);
+	push_i32(ss, num_delta);
 
 	for(long i = 0; i < num_delta; i++)
 	{
 		unsigned cur_ver= since + i;
 		// note: vector starts from zero but logs[0] contains version 1
-		push_u32(ss, cur_ver + 1);
-		std::cout << "log (" << (cur_ver+1)
-		          << ")size:" << to_net_string(this->logs[cur_ver]).size() << std::endl;
-		ss << to_net_string(this->logs[cur_ver]);
+		push_i32(ss, cur_ver + 1);
+		push(ss, this->logs[cur_ver]);
 	}
 
 	return ss.str();
 }
 
-int NameService::apply_logs(const std::string &partial_logs)
+int NameService::apply_logs(std::stringstream &ss)
 {
-	std::cout << partial_logs.size() << std::endl;
-	assert(partial_logs.size() > 4); // must have num_delta
-	std::stringstream ss(partial_logs);
-	unsigned num_delta = pop_u32(ss);
+	unsigned num_delta = pop_i32(ss);
 	LogEntries entries;
 	std::cout << "number of logs:" << num_delta << std::endl;
 
 	for(size_t i = 0; i < num_delta; i++)
 	{
-		unsigned log_version = pop_u32(ss);
+		unsigned log_version = pop_i32(ss);
 		std::cout << "got log (version:" << log_version << "), my version:" << get_version() << std::endl;
 		LogEntry entry = pop_entry(ss);
 		std::stringstream entry_ss(entry.details);
@@ -258,23 +332,36 @@ int NameService::apply_logs(const std::string &partial_logs)
 		{
 			case NEW_NODE:
 			{
-				unsigned id = pop_u32(entry_ss);
+				unsigned id = pop_i32(entry_ss);
 				Name name;
-				name.ip = pop_u32(entry_ss);
-				name.port = pop_u32(entry_ss);
+				name.ip = pop_i32(entry_ss);
+				name.port = pop_i32(entry_ss);
 				this->register_name(id, name);
 			}
 			break;
 
 			case KILL_NODE:
 			{
-				unsigned id = pop_u32(entry_ss);
+				unsigned id = pop_i32(entry_ss);
 				this->kill(id);
 			}
 			break;
 
 			case NEW_FUNC:
+			{
+				unsigned id = pop_i32(entry_ss);
+				Function func = func_from_sstream(entry_ss);
+				this->register_fn(id, func);
+			}
+			break;
+
+			case LISTEN_PORT:
+			{
+				unsigned id = pop_i32(entry_ss);
+				int port = pop_i32(entry_ss);
+				this->add_listen_port(id, port);
 				break;
+			}
 
 			default:
 				//unreachable
@@ -286,19 +373,17 @@ int NameService::apply_logs(const std::string &partial_logs)
 	return -1;
 }
 
-std::string to_net_string(const NameService::LogEntry &entry)
+static void push(std::stringstream &ss, const NameService::LogEntry &entry)
 {
-	std::stringstream ss;
-	push_u32(ss, entry.type);
-	push_string(ss, entry.details);
-	return ss.str();
+	push_i32(ss, entry.type);
+	push(ss, entry.details);
 }
 
-NameService::LogEntry pop_entry(std::stringstream &ss)
+static NameService::LogEntry pop_entry(std::stringstream &ss)
 {
 	typedef NameService::LogEntry LogEntry;
 	LogEntry entry;
-	entry.type = static_cast<NameService::LogType>(pop_u32(ss));
+	entry.type = static_cast<NameService::LogType>(pop_i32(ss));
 	entry.details = pop_string(ss);
 	return entry;
 }

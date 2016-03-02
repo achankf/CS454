@@ -28,14 +28,29 @@ namespace TCP
 class Sockets
 {
 public: // typedefs
-	typedef std::deque<unsigned char> Buffer;
-	typedef std::map<int, Buffer> Requests;
+	struct Trigger
+	{
+	public: // virtual methods
+		virtual ~Trigger() {}
+		virtual void when_connected(int fd) = 0;
+		virtual void when_disconnected(int fd) = 0;
+	};
+
+	struct DataBuffer
+	{
+	public: // interface
+		virtual ~DataBuffer() {}
+		virtual void read_avail(int fd, const std::string &got) = 0;
+		virtual const std::string write_avail(int fd) = 0;
+	};
+
 	typedef std::set<int> Fds;
 
 private: // data
-	Requests read_buf, write_buf;
 	int local_fd;
 	Fds connected_fds;
+	Trigger *trigger;
+	DataBuffer *buffer;
 
 private: // functions
 
@@ -56,21 +71,21 @@ public:
 	Sockets();
 	~Sockets();
 
+	// this is important -- if the buffer is not set, every incoming messages will be discarded
+	void set_buffer(DataBuffer *buffer);
+
+	// this is needed to catch new connections or disconnected nodes
+	void set_trigger(Trigger *trigger);
+
 	// used by the server
 	int bind_and_listen(int port = 0, int num_listen = 100);
 
 	// used by the client to connect to the server
 	int connect_remote(char *hostname, int port);
-
-	// getters for the buffer; IMPORTANT: not synchronized
-	Buffer &get_read_buf(int dst_fd);
-	Buffer &get_write_buf(int dst_fd);
-	int get_available_msg(std::pair<int,Buffer*> &ret);
+	int connect_remote(int ip, int port);
 
 	// flush the write buffer directly, BLOCKING (instead of via sync())
 	int flush(int dst_fd);
-
-	const Fds &all_connected() const;
 
 	// send all requests in the write buffer to remote,
 	// and read all incoming messages to the read buffer
@@ -78,9 +93,5 @@ public:
 };
 
 }
-
-// helpers for manipulating the buffers
-void push_uint(TCP::Sockets::Buffer &buf, unsigned int val);
-int pop_uint(TCP::Sockets::Buffer &buf, unsigned int &val);
 
 #endif

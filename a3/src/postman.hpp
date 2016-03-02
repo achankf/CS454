@@ -9,16 +9,19 @@
 struct Function;
 class NameService;
 
-class Postman
+class Postman : public TCP::Sockets::DataBuffer
 {
 public: // typedefs
+	enum ErrorNo
+	{
+		NO_AVAILABLE_SERVER
+	};
 	enum MessageType
 	{
-		HELLO,
-		GOOD_TO_SEE_YOU,
-		UPDATE_NS,
-		UPDATE_NS_SENT,
+		I_AM_SERVER, // send the port that listen for requests
+		OK_SERVER, // reply for I_AM_SERVER
 		REGISTER,
+		REGISTER_DONE,
 		LOC_REQUEST,
 		LOC_SUCCESS,
 		LOC_FAILURE,
@@ -39,33 +42,50 @@ public: // typedefs
 		int fd;
 		Message message;
 	};
-	typedef std::queue<Request> Requests;
-	typedef std::map<int,Message> AssembleBuffer;
+	typedef std::queue<Request> IncomingRequests;
+	typedef std::map<int, std::queue<Message> > OutgoingRequests;
+	typedef std::map<int, Message> AssembleBuffer;
 private: // data
 	TCP::Sockets &sockets;
 	NameService &ns;
-	Requests incoming, outgoing;
-	Requests reqs;
+	IncomingRequests incoming;
+	OutgoingRequests outgoing;
 	AssembleBuffer asmBuf;
-private: // methods
+
+private: // helper methods
+	Message to_message(MessageType type, std::string msg);
 	int send(int remote_fd, Message &msg);
+
+	// this is for polling only -- need to call sync() separately
+	int receive_any(Request &ret);
+
 public: // methods
 	Postman(TCP::Sockets &sockets, NameService &ns);
 
-	int send_hello(int binder_fd);
-	int send_register(int binder_fd, int server_id, int port, Function &func);
-	int send_call(int server_fd, Function &func, void **args);
+	// send requests
+	int send_execute(int server_fd, Function &func, void **args);
+	int send_loc_request(int binder_fd, Function &func);
 	int send_ns_update(int remote_fd);
+	int send_register(int binder_fd, Function &func);
 	int send_terminate(int binder_fd);
+	int send_iam_server(int binder_fd, int listen_port);
 
-	int reply_hello(int remote_fd, unsigned log_since);
+	// send replies
+	int broadcast_terminate();
+	int reply_execute(int remote_fd, unsigned remote_ns_version);
+	int reply_loc_request(int remote_fd, Function &func, unsigned remote_ns_version);
+	int reply_register(int remote_fd, unsigned remote_ns_version);
+	int reply_update_ns(int remote_fd, unsigned remote_ns_version);
+	int reply_iam_server(int remote_fd, unsigned remote_ns_version);
 
-	int receive_any(Request &ret);
+	// this is a blockying (busy-wait) method
+	int sync_and_receive_any(Request &ret, int timeout = 60);
 
-	const TCP::Sockets::Fds &all_connected() const;
 	int sync();
 
-	Message to_message(MessageType type, std::string msg);
+	// defined by TCP::Sockets::DataBuffer
+	virtual void read_avail(int fd, const std::string &got);
+	virtual const std::string write_avail(int fd);
 };
 
 #endif

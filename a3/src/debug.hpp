@@ -3,11 +3,13 @@
 
 #include "postman.hpp"
 
-class Function;
+struct Function;
+struct Name;
 
 std::string format_arg(int arg_type);
 void debug_print_type(const Postman::Request &req);
-void print_function(Function &func);
+void print_function(const Function &func);
 std::string to_ipv4_string(int bin);
+std::string to_format(Name &name);
 
 #endif

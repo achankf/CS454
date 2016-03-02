@@ -1,3 +1,5 @@
+#include "common.hpp"
+#include "debug.hpp"
 #include "name_service.hpp"
 #include "postman.hpp"
 #include "sockets.hpp"
@@ -7,6 +9,8 @@
 #include <iostream>
 #include <sstream>
 
+static void push(std::stringstream &ss, Postman::Message &msg);
+
 Postman::Postman(TCP::Sockets &sockets, NameService &ns) :
 	sockets(sockets),
 	ns(ns)
@@ -15,107 +19,127 @@ Postman::Postman(TCP::Sockets &sockets, NameService &ns) :
 
 int Postman::send(int remote_fd, Message &msg)
 {
-	TCP::Sockets::Buffer &buf = this->sockets.get_write_buf(remote_fd);
-	push_uint(buf, msg.ns_version);
-	push_uint(buf, msg.msg_type);
-	push_uint(buf, msg.size);
-	const char *msg_cstr = msg.str.c_str();
-	std::copy(msg_cstr, (msg_cstr + msg.size), std::inserter(buf, buf.end()));
+	this->outgoing[remote_fd].push(msg);
 	return this->sockets.flush(remote_fd);
 }
 
-int Postman::send_register(int binder_fd, int server_id, int port, Function &func)
+int Postman::send_register(int binder_fd, Function &func)
 {
-	std::stringstream buf;
-	buf << htonl(server_id)
-	    << htonl(port)
-	    << to_net_string(func);
-	Message msg = to_message(REGISTER, buf.str());
+	std::stringstream ss;
+	push(ss, func);
+	Message msg = to_message(REGISTER, ss.str());
 	return this->send(binder_fd, msg);
 }
 
-int Postman::send_hello(int binder_fd)
+int Postman::send_execute(int server_fd, Function &func, void **args)
 {
-	Message msg = to_message(HELLO, "");
-	return this->send(binder_fd, msg);
-}
+	std::stringstream ss;
+	push(ss, func);
 
-int Postman::send_call(int server_fd, Function &func, void **args)
-{
-	return -1;
+	for(size_t i = 0; i < func.types.size(); i++)
+	{
+		int arg_type = func.types[i];
+
+		if(!is_arg_input(arg_type))
+		{
+			continue;
+		}
+
+		// there is no point in differentiating b/w scalar and array of size 1
+		size_t cardinality = std::max(1lu, get_arg_car(arg_type));
+		push_i16(ss, cardinality);
+
+		switch(get_arg_data_type(arg_type))
+		{
+			case ARG_CHAR:
+			{
+				char *argsi = (char*)args[i];
+
+				for(size_t j = 0; j < cardinality; j++)
+				{
+					push_i8(ss, argsi[j]);
+				}
+
+				break;
+			}
+
+			case ARG_SHORT:
+			{
+				short *argsi = (short*)args[i];
+
+				for(size_t j = 0; j < cardinality; j++)
+				{
+					push_i16(ss, argsi[j]);
+				}
+
+				break;
+			}
+
+			case ARG_INT:
+			{
+				int *argsi = (int*)args[i];
+
+				for(size_t j = 0; j < cardinality; j++)
+				{
+					push_i32(ss, argsi[j]);
+				}
+
+				break;
+			}
+
+			case ARG_LONG:
+			{
+				long *argsi = (long*)args[i];
+
+				for(size_t j = 0; j < cardinality; j++)
+				{
+					push_i64(ss, argsi[j]);
+				}
+
+				break;
+			}
+
+			case ARG_DOUBLE:
+			{
+				double *argsi = (double*)args[i];
+
+				for(size_t j = 0; j < cardinality; j++)
+				{
+					push_f64(ss, argsi[j]);
+				}
+
+				break;
+			}
+
+			case ARG_FLOAT:
+			{
+				double *argsi = (double*)args[i];
+
+				for(size_t j = 0; j < cardinality; j++)
+				{
+					push_f32(ss, argsi[j]);
+				}
+
+				break;
+			}
+		}
+	}
+
+	Message msg = to_message(EXECUTE, ss.str());
+	return this->send(server_fd, msg);
 }
 
 int Postman::send_ns_update(int remote_fd)
 {
+	(void) remote_fd;
+	assert(false);
 	return -1;
 }
 
 int Postman::send_terminate(int binder_fd)
 {
-	return -1;
-}
-
-int Postman::receive_any(Request &ret)
-{
-	if(this->sockets.sync() < 0)
-	{
-		// some error occurred
-		//TODO ???
-		assert(false);
-		return -1;
-	}
-
-	std::pair<int, TCP::Sockets::Buffer*> raw_req;
-
-	if(this->sockets.get_available_msg(raw_req) < 0)
-	{
-		// nothing available yet
-		return -1;
-	}
-
-	int fd = raw_req.first;
-	TCP::Sockets::Buffer &read_buf = *raw_req.second;
-	assert(read_buf.size() > 0);
-	Message &req_buf = this->asmBuf[fd];
-
-	if(req_buf.str.empty())
-	{
-		// this is a new request, so the header (8 bytes) must be read
-		pop_uint(read_buf, req_buf.ns_version);
-		pop_uint(read_buf, (unsigned int &)req_buf.msg_type);
-		pop_uint(read_buf, req_buf.size);
-	}
-
-	assert(req_buf.size > 0);
-	assert(req_buf.msg_type >= 0 && req_buf.msg_type <= TERMINATE);
-	unsigned int size_minus_one = req_buf.size - 1;
-
-	while(!read_buf.empty())
-	{
-		unsigned char c = read_buf.front();
-		read_buf.pop_front();
-
-		if(req_buf.str.size() == size_minus_one)
-		{
-			int retval = -1;
-
-			if(c == '\0')
-			{
-				// whole message read
-				Request temp = {fd, req_buf};
-				ret = temp;
-				retval = 0;
-			}
-
-			// else: message is corrupted?
-			// remove the finished request from the buffer
-			this->asmBuf.erase(fd);
-			return retval;
-		}
-
-		req_buf.str.push_back(c);
-	}
-
+	(void) binder_fd;
+	assert(false);
 	return -1;
 }
 
@@ -126,30 +150,156 @@ int Postman::sync()
 
 Postman::Message Postman::to_message(Postman::MessageType type, std::string msg)
 {
-	Postman::Message ret = {this->ns.get_version(), msg.size() + 1, type, msg};
+	Postman::Message ret = {this->ns.get_version(), msg.size(), type, msg};
 	return ret;
 }
 
-const TCP::Sockets::Fds &Postman::all_connected() const
+int Postman::reply_register(int remote_fd, unsigned remote_ns_version)
 {
-	return this->sockets.all_connected();
+	Message msg = to_message(REGISTER_DONE, this->ns.get_logs(remote_ns_version));
+	return send(remote_fd, msg);
 }
 
-#include <iomanip>
-int Postman::reply_hello(int remote_fd, unsigned log_since)
+int Postman::sync_and_receive_any(Request &ret, int timeout)
 {
-#ifndef NDEBUG
-	std::cout << "replying hello to fd:" << remote_fd << std::endl;
-#endif
-	std::string delta_logs = ns.get_logs(log_since);
-	Message msg = to_message(GOOD_TO_SEE_YOU, delta_logs);
-	std::cout << std::setfill('0');
+	Timer timer(timeout);
 
-	for(size_t i = 0; i < msg.str.size(); i++)
+	// busy-wait until "good to see you" reply is back
+	while(this->receive_any(ret) < 0)
 	{
-		std::cout << " " << std::hex << std::setw(2) << ((unsigned)msg.str[i] &0xff);
+		if(this->sync() < 0)
+		{
+			// some error occurred
+			//TODO ???
+			assert(false);
+		}
+
+		if(timer.is_timeout())
+		{
+			// probably not likely going to happen
+#ifndef NDEBUG
+			std::cout << "timeout" << std::endl;
+#endif
+			return -1;
+		}
 	}
 
-	std::cout << std::endl << std::dec;
+	return 0;
+}
+
+int Postman::send_loc_request(int binder_fd, Function &func)
+{
+	std::stringstream ss;
+	push(ss, func);
+	Message msg = to_message(LOC_REQUEST, ss.str());
+	return send(binder_fd, msg);
+}
+
+int Postman::send_iam_server(int binder_fd, int listen_port)
+{
+	std::stringstream ss;
+	push_i32(ss, listen_port);
+	Message msg = to_message(I_AM_SERVER, ss.str());
+	return send(binder_fd, msg);
+}
+
+int Postman::reply_iam_server(int remote_fd, unsigned remote_ns_version)
+{
+	std::stringstream ss;
+	ss << this->ns.get_logs(remote_ns_version);
+	Message msg = to_message(OK_SERVER, ss.str());
 	return send(remote_fd, msg);
+}
+
+int Postman::reply_loc_request(int remote_fd, Function &func, unsigned remote_ns_version)
+{
+	unsigned target_id;
+	std::stringstream ss;
+	Message msg;
+
+	if(this->ns.suggest(func, target_id) < 0)
+	{
+		// cannot find any server (no suggestion)
+		push_i32(ss, NO_AVAILABLE_SERVER);
+		// sync remote's log anyway
+		ss << this->ns.get_logs(remote_ns_version);
+		msg = to_message(LOC_FAILURE, ss.str());
+	}
+	else
+	{
+		// got a suggestion (with round-robin)
+		push_i32(ss, target_id);
+		ss << this->ns.get_logs(remote_ns_version);
+		msg = to_message(LOC_SUCCESS, ss.str());
+	}
+
+	return send(remote_fd, msg);
+}
+
+void Postman::read_avail(int fd, const std::string &got)
+{
+	std::stringstream ss(got);
+	Message &req_buf = this->asmBuf[fd];
+
+	if(req_buf.str.empty())
+	{
+		// this is a new request, so the header (8 bytes) must be read
+		req_buf.ns_version = pop_i32(ss);
+		req_buf.msg_type = static_cast<MessageType>(pop_i32(ss));
+		req_buf.size = pop_i32(ss);
+		// data + null character
+		req_buf.str.reserve(req_buf.size + 1);
+	}
+
+	// copy message into the assembling buffer
+	size_t remaining = req_buf.size - req_buf.str.size();
+	char *buf = new char[remaining];
+	ss.read(buf, remaining);
+	size_t num_read = static_cast<size_t>(ss.gcount());
+	req_buf.str.append(buf, num_read);
+	delete buf;
+
+	if(num_read == remaining)
+	{
+		// this request is ready
+		Request req = { fd, req_buf }; // copy message
+		incoming.push(req);
+		// remove the temporary object in the assembler
+		this->asmBuf.erase(fd);
+	}
+}
+
+int Postman::receive_any(Request &ret)
+{
+	if(this->incoming.empty())
+	{
+		return -1;
+	}
+
+	// copy and remove
+	ret = this->incoming.front();
+	this->incoming.pop();
+	return 0;
+}
+
+const std::string Postman::write_avail(int fd)
+{
+	std::stringstream ss;
+	std::queue<Message> &requests = this->outgoing[fd];
+
+	while(!requests.empty())
+	{
+		push(ss, requests.front());
+		requests.pop();
+	}
+
+	return ss.str();
+}
+
+static void push(std::stringstream &ss, Postman::Message &msg)
+{
+	push_i32(ss, msg.ns_version);
+	push_i32(ss, msg.msg_type);
+	push_i32(ss, msg.size);
+	ss.write(msg.str.c_str(), msg.str.size());
 }

@@ -12,7 +12,10 @@ int TCP::Sockets::create_socket()
 	return socket(AF_INET, SOCK_STREAM, 0);
 }
 
-TCP::Sockets::Sockets() : local_fd(-1)
+TCP::Sockets::Sockets()
+	: local_fd(-1),
+	  trigger(NULL),
+	  buffer(NULL)
 {
 }
 
@@ -124,49 +127,50 @@ int TCP::Sockets::sync()
 
 			if(fd == this->local_fd)
 			{
-				int clientfd = accept(this->local_fd, NULL, NULL);
+				int remote_fd = accept(this->local_fd, NULL, NULL);
 
-				if(clientfd < 0)
+				if(remote_fd < 0)
 				{
 					// this should not happen in the student environment
 					assert(false);
 					return -1;
 				}
 
-				bool inserted = this->connected_fds.insert(clientfd).second;
+				bool inserted = this->connected_fds.insert(remote_fd).second;
 				// supress warning when compiling with NDEBUG
 				(void) inserted;
 				// fds must be unique; something is wrong here
 				assert(inserted);
+
+				if(trigger != NULL)
+				{
+					trigger->when_connected(remote_fd);
+				}
+
 #ifndef NDEBUG
-				std::cout << "connected " << clientfd << std::endl;
+				std::cout << "connected " << remote_fd << std::endl;
 #endif
 			}
 			else
 			{
-				// copy message to a buffer
-				Buffer &msg = get_read_buf(fd);
-				size_t size = std::min(SOCKET_BUF_SIZE - msg.size(), sizeof buf);
+				// sockets for remote connections
+				size_t count = read(fd, buf, sizeof(buf));
 
-				if(size > 0)
+				if(count == 0)
 				{
-					// sockets for remote connections
-					size_t count = read(fd, buf, sizeof(buf));
+					// remote sent EOF -- disconnect remote
+					this->disconnect(fd);
+				}
+				else
+				{
+					std::string buf_str(buf, count);
 
-					if(count == 0)
+					if(this->buffer != NULL)
 					{
-						// remote sent EOF -- disconnect remote
-						this->disconnect(fd);
-					}
-					else
-					{
-						std::copy(buf, buf+count, std::inserter(msg, msg.end()));
-						// msg could have stored requests that haven't been sent
-						assert(msg.size() >= count);
+						// notify the buffer
+						this->buffer->read_avail(fd, buf_str);
 					}
 				}
-
-				// otherwise full; don't read -- we don't want to expand the buffer beyond SOCKET_BUF_SIZE
 			}
 		}
 
@@ -182,32 +186,39 @@ int TCP::Sockets::sync()
 
 int TCP::Sockets::flush(int dst_fd)
 {
-	char buf[SOCKET_BUF_SIZE];
 	// should only write to a REMOTE connection
 	// if local_fd isn't set (i.e. client doesn't bind and listen), then local_fd should be -1 and the assertion should always hold
 	assert(dst_fd != this->local_fd);
-	Buffer &msg = this->get_write_buf(dst_fd);
 
-	if(!msg.empty())
+	if(this->buffer == NULL)
 	{
-		size_t i;
-
-		for(i = 0; i < sizeof buf && !msg.empty(); i++)
-		{
-			buf[i] = msg.front();
-			msg.pop_front();
-		}
-
-		if(write(dst_fd, buf, i) < 0)
-		{
-			// this can happen when the remote shutdown before the reply was sent
-			// for example, running valgrind can slow the server significantly and this can happen
-			// though, this probably won't happen for the assignment, so I'll ignore error handling
-			return -1;
-		}
+		// no buffer set -- coding error
+		assert(false);
+		return 0;
 	}
 
-	return 0;
+	std::string msg = this->buffer->write_avail(dst_fd);
+
+	if(msg.empty())
+	{
+		// have nothing to send
+		return -1;
+	}
+
+	char *buf = new char[msg.size() + 1];
+	const char *c_str = msg.c_str();
+	std::copy(c_str, (c_str + msg.size()), buf);
+	size_t num_written = write(dst_fd, buf, msg.size());
+	delete buf;
+
+	if(num_written == msg.size())
+	{
+		return 0;
+	}
+
+	// for example, running valgrind can slow the server significantly and this can happen
+	// though, this probably won't happen for the assignment, so I'll ignore error handling
+	return -1;
 }
 
 int TCP::Sockets::get_max_fd() const
@@ -228,7 +239,6 @@ int TCP::Sockets::get_max_fd() const
 
 int TCP::Sockets::connect_remote(char *hostname, int port)
 {
-	int temp_fd = this->create_socket();
 	// resolve IP address
 	int ip;
 	{
@@ -239,16 +249,21 @@ int TCP::Sockets::connect_remote(char *hostname, int port)
 		{
 			// should not happen in the student environment
 			assert(false);
-			close(temp_fd);
 			return -1;
 		}
 
 		memcpy(&ip, server_entity->h_addr, server_entity->h_length);
 	}
+	return this->connect_remote(ip, port);
+}
+
+int TCP::Sockets::connect_remote(int ip, int port)
+{
 	struct sockaddr_in remote_info;
 	remote_info.sin_family = AF_INET;
 	remote_info.sin_port = htons(port);
 	memcpy(&remote_info.sin_addr, &ip, sizeof(int));
+	int temp_fd = this->create_socket();
 
 	if(connect(temp_fd, (struct sockaddr *)&remote_info, sizeof(remote_info)) < 0)
 	{
@@ -268,6 +283,7 @@ void TCP::Sockets::disconnect(int fd)
 #ifndef NDEBUG
 	std::cout << "disconnecting " << fd << std::endl;
 #endif
+	this->trigger->when_disconnected(fd);
 	Fds::iterator it = this->connected_fds.find(fd);
 	// this method should only be called once per fd
 	assert(it != this->connected_fds.end());
@@ -275,63 +291,12 @@ void TCP::Sockets::disconnect(int fd)
 	this->connected_fds.erase(it);
 }
 
-TCP::Sockets::Buffer &TCP::Sockets::get_read_buf(int dst_fd)
+void TCP::Sockets::set_buffer(DataBuffer *buffer)
 {
-	return this->read_buf[dst_fd];
+	this->buffer = buffer;
 }
 
-TCP::Sockets::Buffer &TCP::Sockets::get_write_buf(int dst_fd)
+void TCP::Sockets::set_trigger(Trigger *trigger)
 {
-	return this->write_buf[dst_fd];
-}
-
-int TCP::Sockets::get_available_msg(std::pair<int,Buffer*> &ret)
-{
-	Requests::iterator it = this->read_buf.begin();
-
-	for(; it != this->read_buf.end(); it++)
-	{
-		if(!it->second.empty())
-		{
-			ret.first = it->first;
-			ret.second = &it->second;
-			return 0;
-		}
-	}
-
-	return -1;
-}
-
-const TCP::Sockets::Fds &TCP::Sockets::all_connected() const
-{
-	return this->connected_fds;
-}
-
-void push_uint(TCP::Sockets::Buffer &buf, unsigned int val)
-{
-	val = htonl(val);
-	buf.push_back(val >> 24);
-	buf.push_back(val >> 16);
-	buf.push_back(val >> 8);
-	buf.push_back(val);
-}
-
-int pop_uint(TCP::Sockets::Buffer &buf, unsigned int &val)
-{
-	if(buf.size() < 4)
-	{
-		// cannot read a whole unsigned int
-		return -1;
-	}
-
-	val = buf.front() << 24;
-	buf.pop_front();
-	val += buf.front() << 16;
-	buf.pop_front();
-	val += buf.front() << 8;
-	buf.pop_front();
-	val += buf.front();
-	buf.pop_front();
-	val = ntohl(val);
-	return 0;
+	this->trigger = trigger;
 }

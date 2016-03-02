@@ -1,11 +1,12 @@
 #include "common.hpp"
-#include "name_service.hpp" // struct Name
 #include "debug.hpp"
+#include "name_service.hpp" // struct Name
 #include "sockets.hpp"
 #include <arpa/inet.h>
 #include <cassert>
 #include <cstdlib>
 #include <cstring>
+#include <ctime>
 #include <iostream>
 #include <netdb.h>
 #include <unistd.h>
@@ -13,10 +14,10 @@
 void print_host_info(int fd, const char *prefix)
 {
 	std::string hostname;
-	Name name;
-	get_hostname(fd, hostname, name);
+	int port;
+	get_hostname(fd, hostname, port);
 	std::cout << prefix << "_ADDRESS " << hostname << std::endl
-	          << prefix << "_PORT " << name.port << std::endl;
+	          << prefix << "_PORT " << port << std::endl;
 }
 
 int connect_to_binder(TCP::Sockets &sockets)
@@ -43,27 +44,14 @@ int connect_to_binder(TCP::Sockets &sockets)
 	return sockets.connect_remote(hostname, port);
 }
 
-static Name sockaddr_in_to_name(struct sockaddr_in &sin)
+void get_hostname(int fd, std::string &hostname, int &port)
 {
-	Name ret;
-	// convert the ip address into host byte order
-	ret.ip = ntohl(sin.sin_addr.s_addr);
-	ret.port = ntohs(sin.sin_port);
-	return ret;
-}
-
-void get_hostname(int fd, std::string &hostname, Name &name)
-{
-	// get ip address and port number
+	// get port number
 	{
 		struct sockaddr_in sin;
 		socklen_t len = sizeof(sin);
-		int retval = getsockname(fd, (struct sockaddr *)&sin, &len);
-		// supress warning when compiling with NDEBUG
-		(void) retval;
-		// not going to deal with ERRNO
-		assert(retval >= 0);
-		name = sockaddr_in_to_name(sin);
+		getsockname(fd, (struct sockaddr *)&sin, &len);
+		port = ntohs(sin.sin_port);
 	}
 	// get hostname
 	{
@@ -89,20 +77,21 @@ int get_peer_info(int fd, Name &ret)
 	}
 
 	// assign name
-	ret = sockaddr_in_to_name(sin);
+	ret.ip = sin.sin_addr.s_addr; // DON'T CONVERT THIS INTO HOST ORDER
+	ret.port = ntohs(sin.sin_port);
 	return 0;
 }
 
-void push_u32(std::stringstream &ss, unsigned val)
+void push_i32(std::stringstream &ss, int val)
 {
 	val = htonl(val);
 	ss.write((char*)&val, 4);
 }
 
-unsigned pop_u32(std::stringstream &ss)
+int pop_i32(std::stringstream &ss)
 {
 	// assumes ss contains the valid bytes
-	unsigned ret;
+	int ret;
 	ss.read((char*)&ret, 4);
 	return ntohl(ret);
 }
@@ -124,14 +113,73 @@ std::string raw_read(std::stringstream &ss, size_t size)
 	return ret;
 }
 
-void push_string(std::stringstream &ss, const std::string &str)
+void push(std::stringstream &ss, const std::string &str)
 {
-	push_u32(ss, str.size());
+	push_i32(ss, str.size());
 	ss << str;
 }
 
 std::string pop_string(std::stringstream &ss)
 {
-	unsigned size = pop_u32(ss);
+	unsigned size = pop_i32(ss);
 	return raw_read(ss, size);
+}
+
+Timer::Timer(int timeout_in_seconds)
+	: start(std::clock()),
+	  timeout_in_seconds(timeout_in_seconds) {}
+
+bool Timer::is_timeout() const
+{
+	float duration = clock() - this->start;
+	return (duration / CLOCKS_PER_SEC) >= this->timeout_in_seconds;
+}
+
+void push_i8(std::stringstream &ss, char val)
+{
+	ss.write(&val, 1);
+}
+
+void push_i16(std::stringstream &ss, short val)
+{
+	val = htons(val);
+	ss.write((char*)&val, 2);
+}
+
+void push_i64(std::stringstream &ss, long val)
+{
+	int num = 0x01;
+	char *data = (char*)&num;
+	char buf[8];
+
+	if(*data == 0x01) // test the first byte
+	{
+		// little endian -- convert to big endian
+		buf[0] = data[7];
+		buf[1] = data[6];
+		buf[2] = data[5];
+		buf[3] = data[4];
+		buf[4] = data[3];
+		buf[5] = data[2];
+		buf[6] = data[1];
+		buf[7] = data[0];
+		ss.write((char*)&buf, 8);
+	}
+	else
+	{
+		// big endian -- just pass it
+		ss.write((char*)&val, 8);
+	}
+}
+
+void push_f32(std::stringstream &ss, float val)
+{
+	//TODO hope that it works...
+	ss.write((char*)&val, 4);
+}
+
+void push_f64(std::stringstream &ss, double val)
+{
+	//TODO hope that it works...
+	ss.write((char*)&val, 8);
 }
