@@ -286,7 +286,7 @@ std::string NameService::get_logs(unsigned since) const
 #endif
 	push_i32(ss, num_delta);
 
-	for(long i = 0; i < num_delta; i++)
+	for(unsigned i = 0; i < num_delta; i++)
 	{
 		unsigned cur_ver= since + i;
 		// note: vector starts from zero but logs[0] contains version 1

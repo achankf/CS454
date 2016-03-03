@@ -32,7 +32,7 @@ public: // typedefs
 	{
 		NEW_NODE,
 		KILL_NODE,
-		NEW_FUNC,
+		NEW_FUNC
 	};
 
 	struct LogEntry

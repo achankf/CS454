@@ -14,7 +14,6 @@ int TCP::Sockets::create_socket()
 
 TCP::Sockets::Sockets()
 	: local_fd(-1),
-	  trigger(NULL),
 	  buffer(NULL)
 {
 }
@@ -141,11 +140,6 @@ int TCP::Sockets::sync()
 				(void) inserted;
 				// fds must be unique; something is wrong here
 				assert(inserted);
-
-				if(trigger != NULL)
-				{
-					trigger->when_connected(remote_fd);
-				}
 
 #ifndef NDEBUG
 				std::cout << "connected " << remote_fd << std::endl;
@@ -289,11 +283,6 @@ void TCP::Sockets::disconnect(int fd)
 		return;
 	}
 
-	if(this->trigger != NULL)
-	{
-		this->trigger->when_disconnected(fd);
-	}
-
 	close(fd);
 	this->connected_fds.erase(it);
 }
@@ -301,11 +290,6 @@ void TCP::Sockets::disconnect(int fd)
 void TCP::Sockets::set_buffer(DataBuffer *buffer)
 {
 	this->buffer = buffer;
-}
-
-void TCP::Sockets::set_trigger(Trigger *trigger)
-{
-	this->trigger = trigger;
 }
 
 TCP::ScopedConnection::ScopedConnection(TCP::Sockets &sockets, int ip, int port) : fd(sockets.connect_remote(ip, port)), sockets(sockets) {}

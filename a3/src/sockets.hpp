@@ -28,13 +28,6 @@ namespace TCP
 class Sockets
 {
 public: // typedefs
-	struct Trigger
-	{
-	public: // virtual methods
-		virtual ~Trigger() {}
-		virtual void when_connected(int fd) {}
-		virtual void when_disconnected(int fd) {}
-	};
 
 	struct DataBuffer
 	{
@@ -49,7 +42,6 @@ public: // typedefs
 private: // data
 	int local_fd;
 	Fds connected_fds;
-	Trigger *trigger;
 	DataBuffer *buffer;
 
 private: // functions
@@ -72,9 +64,6 @@ public:
 
 	// this is important -- if the buffer is not set, every incoming messages will be discarded
 	void set_buffer(DataBuffer *buffer);
-
-	// this is needed to catch new connections or disconnected nodes
-	void set_trigger(Trigger *trigger);
 
 	// used by the server
 	int bind_and_listen(int port = 0, int num_listen = 100);

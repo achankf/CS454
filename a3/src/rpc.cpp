@@ -293,7 +293,7 @@ int rpcExecute()
 		if(remote_ns_version > g.ns.get_version())
 		{
 			// the client has more update-to-date logs, ask for it
-			handle_update_logs(remote_fd);
+			g.handle_update_log(remote_fd);
 		}
 
 		if(g.get_func_skel(func, skel) < 0)
@@ -358,8 +358,7 @@ int Global::get_func_skel(const Function &func, skeleton &ret)
 
 int Global::wait_for_desired(int desired, Postman::Request &ret, int timeout)
 {
-	Timer timer; // double-timer
-	std::cout << "wait: is_terminate:" << is_terminate << std::endl;
+	Timer timer(timeout); // double-timer
 
 	while(!this->is_terminate)
 	{
