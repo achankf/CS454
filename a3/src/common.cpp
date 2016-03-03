@@ -96,6 +96,11 @@ int pop_i32(std::stringstream &ss)
 	return ntohl(ret);
 }
 
+char pop_i8(std::stringstream &ss)
+{
+	return ss.get();
+}
+
 std::string raw_read(std::stringstream &ss, size_t size)
 {
 	char *buf = new char[size+1];

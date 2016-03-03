@@ -237,7 +237,7 @@ int TCP::Sockets::get_max_fd() const
 	return -1;
 }
 
-int TCP::Sockets::connect_remote(char *hostname, int port)
+int TCP::Sockets::connect_remote(const char *hostname, int port)
 {
 	// resolve IP address
 	int ip;
@@ -267,8 +267,6 @@ int TCP::Sockets::connect_remote(int ip, int port)
 
 	if(connect(temp_fd, (struct sockaddr *)&remote_info, sizeof(remote_info)) < 0)
 	{
-		// should not happen in the student environment
-		assert(false);
 		close(temp_fd);
 		return -1;
 	}
@@ -283,10 +281,19 @@ void TCP::Sockets::disconnect(int fd)
 #ifndef NDEBUG
 	std::cout << "disconnecting " << fd << std::endl;
 #endif
-	this->trigger->when_disconnected(fd);
 	Fds::iterator it = this->connected_fds.find(fd);
-	// this method should only be called once per fd
-	assert(it != this->connected_fds.end());
+
+	if(it == this->connected_fds.end())
+	{
+		// do nothing since the fd doesn't represent a connected socket
+		return;
+	}
+
+	if(this->trigger != NULL)
+	{
+		this->trigger->when_disconnected(fd);
+	}
+
 	close(fd);
 	this->connected_fds.erase(it);
 }
@@ -299,4 +306,18 @@ void TCP::Sockets::set_buffer(DataBuffer *buffer)
 void TCP::Sockets::set_trigger(Trigger *trigger)
 {
 	this->trigger = trigger;
+}
+
+TCP::ScopedConnection::ScopedConnection(TCP::Sockets &sockets, int ip, int port) : fd(sockets.connect_remote(ip, port)), sockets(sockets) {}
+
+TCP::ScopedConnection::ScopedConnection(TCP::Sockets &sockets, const char *hostname, int port) : fd(sockets.connect_remote(hostname, port)), sockets(sockets) {}
+
+TCP::ScopedConnection::~ScopedConnection()
+{
+	sockets.disconnect(fd); // fd can be -1; Sockets ignore bad fds
+}
+
+int TCP::ScopedConnection::get_fd() const
+{
+	return fd;
 }

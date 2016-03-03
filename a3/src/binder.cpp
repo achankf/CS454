@@ -9,68 +9,95 @@
 #include <iostream>
 #include <sstream>
 
-// ============== class definitions  ==============
+// ============== id generator ==============
 
-class FdBookKeeper;
-
-struct BinderTrigger : public TCP::Sockets::Trigger
+static unsigned next_u32()
 {
-private: // references
-	NameService &ns;
-	FdBookKeeper &keeper;
-public: // references
+	static unsigned i = 0;
+	return i++;
+}
 
-	BinderTrigger(NameService &ns, FdBookKeeper &keeper);
-	virtual void when_connected(int fd);
-	virtual void when_disconnected(int fd);
-};
-
-// since sockets doesn't clean up FdBookKeeper, a separate version
-// of sync_and_receive_any is needed
-//int sync_and_receive_any(Postman &postman, FdBookKeeper &keeper, Request &req);
-
-class FdBookKeeper
+void terminate_servers(Postman &postman)
 {
-private: // data
-	unsigned next;
-	std::map<int, unsigned> fd_to_id;
-private: // helper
-	unsigned next_u32();
-public: // methods
-	FdBookKeeper() : next(0) {}
+	NameService::Names names = postman.ns.get_all_names();
+	NameService::Names::const_iterator it = names.begin();
 
-	// called by BinderTrigger; returns id
-	unsigned remove_fd(int fd);
+	for(; it != names.end(); it++)
+	{
+		TCP::ScopedConnection conn(postman.sockets, it->ip, it->port);
+		int fd = conn.get_fd();
 
-	// try to find an id for the name; if not found, assign a new id
-	unsigned try_resolve(int fd, NameService &ns, Name &name);
-};
+		if(postman.send_terminate(fd) < 0)
+		{
+			// ???? maybe the server is busy? assume it's dead
+			continue;
+		}
 
-// ============== codes ==============
+		Postman::Request req;
+		Timer timer;
 
-int handle_request(Postman &postman, NameService &ns, FdBookKeeper &keeper, Postman::Request &req)
+		while(!timer.is_timeout())
+		{
+			if(postman.sync_and_receive_any(req) < 0
+			        || req.message.msg_type != Postman::CONFIRM_TERMINATE)
+			{
+				// timeout or drop requests (since we're terminating there's no need to process new requests)
+				continue;
+			}
+
+			std::cout << "send terminate " << fd << std::endl;
+			postman.send_confirm_terminate(fd);
+			break;
+		}
+	}
+}
+
+int handle_request(Postman &postman, Postman::Request &req)
 {
+	NameService &ns = postman.ns;
 	int remote_fd = req.fd;
 	Postman::Message &msg = req.message;
 	unsigned remote_ns_version = msg.ns_version;
-	Name remote_name;
-	unsigned remote_id = keeper.try_resolve(remote_fd, ns, remote_name);
 	std::stringstream ss(msg.str);
 
 	switch(msg.msg_type)
 	{
 		case Postman::I_AM_SERVER:
 		{
+			Name remote_name;
+
+			// get the ip address and discard port (we use the listening port number instead)
+			if(get_peer_info(remote_fd, remote_name) < 0)
+			{
+				// should not happen
+				assert(false);
+				return -1;
+			}
+
+			unsigned remote_id;
 			int listen_port = pop_i32(ss);
-			ns.add_listen_port(remote_id, listen_port);
-			return postman.reply_iam_server(remote_fd, remote_ns_version);
+			remote_name.port = listen_port;
+
+			if(ns.resolve(remote_name, remote_id) >= 0)
+			{
+				// previous registered, and restarted running on the same machine and port number
+				// remove old records
+				ns.kill(remote_id);
+			}
+
+			// get a new id and then register it into the name directory
+			remote_id = next_u32();
+			ns.register_name(remote_id, remote_name);
+			return postman.reply_server_ok(remote_fd, remote_id, remote_ns_version);
 		}
 
 		case Postman::REGISTER:
 		{
+			unsigned remote_id = pop_i32(ss);
 			Function func = func_from_sstream(ss);
 			ns.register_fn(remote_id, func);
-			return postman.reply_register(remote_fd, remote_ns_version);
+			int retval = postman.reply_register(remote_fd, remote_ns_version);
+			return retval;
 		}
 
 		case Postman::LOC_REQUEST:
@@ -79,13 +106,16 @@ int handle_request(Postman &postman, NameService &ns, FdBookKeeper &keeper, Post
 			return postman.reply_loc_request(remote_fd, func, remote_ns_version);
 		}
 
-		case Postman::TERMINATE:
-			assert(false);
-			return -1;
+		case Postman::CONFIRM_TERMINATE:
+			// the remote got a fake message (binder handles TERMINATE in terminate())
+			return postman.send_confirm_terminate(remote_fd, false);
+
+		case Postman::ASK_NS_UPDATE:
+			return postman.reply_ns_update(remote_fd, remote_ns_version);
 
 		default:
 			// not applicable; drop request
-			return 0;
+			return 1;
 	}
 
 	// unreachable
@@ -93,79 +123,11 @@ int handle_request(Postman &postman, NameService &ns, FdBookKeeper &keeper, Post
 	return -1;
 }
 
-BinderTrigger::BinderTrigger(NameService &ns, FdBookKeeper &keeper)
-	: ns(ns), keeper(keeper) {}
-
-void BinderTrigger::when_connected(int fd)
-{
-	Name remote_name;
-	unsigned remote_id = this->keeper.try_resolve(fd, ns, remote_name);
-	(void) remote_id;
-#ifndef NDEBUG
-	std::cout << "book keeper registered fd:" << fd << " id:" << remote_id << ' ' << to_format(remote_name) << std::endl;
-#endif
-}
-
-void BinderTrigger::when_disconnected(int fd)
-{
-	unsigned id = this->keeper.remove_fd(fd);
-	this->ns.kill(id);
-}
-
-unsigned FdBookKeeper::try_resolve(int fd, NameService &ns, Name &name)
-{
-	if(get_peer_info(fd, name) < 0)
-	{
-		// should not happen
-		assert(false);
-		return -1;
-	}
-
-	unsigned id;
-	std::map<int,unsigned>::iterator it = this->fd_to_id.find(fd);
-
-	if(it != this->fd_to_id.end())
-	{
-#ifndef NDEBUG
-		// if found in the book keeper, the name and its id must be found in name directory too
-		int ret = ns.resolve(name, id);
-		assert(ret >= 0);
-		assert(id == it->second);
-#endif
-		return it->second;
-	}
-
-	// name does not exist, add it to the book keeper and to the directory
-	id = this->next_u32();
-	this->fd_to_id.insert(std::make_pair(fd,id));
-	ns.register_name(id, name);
-	return 0;
-}
-
-unsigned FdBookKeeper::next_u32()
-{
-	unsigned ret = this->next;
-	this->next++;
-	return ret;
-}
-
-unsigned FdBookKeeper::remove_fd(int fd)
-{
-	std::map<int,unsigned>::iterator it = this->fd_to_id.find(fd);
-	// fails when removing a fd that did not exist... bug
-	assert(it != this->fd_to_id.end());
-	fd_to_id.erase(it);
-	return it->second;
-}
-
 int main()
 {
 	NameService ns;
-	FdBookKeeper keeper;
-	BinderTrigger trigger(ns, keeper);
 	TCP::Sockets sockets;
 	Postman postman(sockets, ns);
-	sockets.set_trigger(&trigger);
 	sockets.set_buffer(&postman);
 	int fd = sockets.bind_and_listen();
 	print_host_info(fd,"BINDER");
@@ -180,7 +142,14 @@ int main()
 #ifndef NDEBUG
 			debug_print_type(req);
 #endif
-			int retval = handle_request(postman, ns, keeper, req);
+
+			if(req.message.msg_type == Postman::TERMINATE)
+			{
+				terminate_servers(postman);
+				break;
+			}
+
+			int retval = handle_request(postman, req);
 			(void) retval;
 			// otherwise there's a bug... or something hasn't been implemented
 			assert(retval >= 0);

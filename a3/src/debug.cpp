@@ -16,8 +16,16 @@ void debug_print_type(const Postman::Request &req)
 			temp = "Request: I_AM_SERVER";
 			break;
 
-		case Postman::OK_SERVER:
-			temp = "Request: OK_SERVER";
+		case Postman::ASK_NS_UPDATE:
+			temp = "Request: ASK_NS_UPDATE";
+			break;
+
+		case Postman::SERVER_OK:
+			temp = "Request: SERVER_OK";
+			break;
+
+		case Postman::NS_UPDATE_SENT:
+			temp = "Request: NS_UPDATE_SENT";
 			break;
 
 		case Postman::REGISTER:
@@ -32,24 +40,20 @@ void debug_print_type(const Postman::Request &req)
 			temp = "Request: LOC_REQUEST";
 			break;
 
-		case Postman::LOC_SUCCESS:
-			temp="Request: LOC_SUCCESS";
-			break;
-
-		case Postman::LOC_FAILURE:
-			temp = "Request: LOC_FAILURE";
+		case Postman::LOC_REPLY:
+			temp="Request: LOC_REPLY";
 			break;
 
 		case Postman::EXECUTE:
 			temp = "Request: EXECUTE";
 			break;
 
-		case Postman::EXECUTE_SUCCESS:
-			temp = "Request: EXECUTE_SUCCESS";
+		case Postman::EXECUTE_REPLY:
+			temp = "Request: EXECUTE_REPLY";
 			break;
 
-		case Postman::EXECUTE_FAILURE:
-			temp = "Request: EXECUTE_FAILURE";
+		case Postman::CONFIRM_TERMINATE:
+			temp = "Request: CONFIRM_TERMINATE";
 			break;
 
 		case Postman::TERMINATE:
@@ -145,7 +149,7 @@ std::string to_ipv4_string(int bin)
 	return ss.str();
 }
 
-std::string to_format(Name &name)
+std::string to_format(const Name &name)
 {
 	std::stringstream ss;
 	ss << "ip:" << to_ipv4_string(name.ip)

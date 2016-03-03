@@ -5,72 +5,21 @@
 #include <arpa/inet.h> // network bytes order
 #include <cassert>
 #include <exception>
-#include <iostream>
 #include <iterator>
+
+#ifndef NDEBUG
+#include <iostream>
+#endif
 
 // utility methods
 // logs
 static NameService::LogEntry pop_entry(std::stringstream &ss);
 static void push(std::stringstream &ss, const NameService::LogEntry &entry);
 
-void NameService::cleanup_disconnected_ids(NameIds &ids)
-{
-	// clean up disconnected nodes to avoid making bad decisions
-	NameIds::iterator it = ids.begin();
-
-	while(it != ids.end())
-	{
-		if(id_to_name.find(*it) == id_to_name.end())
-		{
-			// not found in the id_to_name mapping -- absolutely disconnected
-			NameIds::iterator it_temp = it;
-			++it;
-			ids.erase(it_temp);
-		}
-		else
-		{
-			// this node is still perceived as connected (accurate up to the logs)
-			++it;
-		}
-	}
-}
-
-int NameService::get_listen_port(unsigned id, int &ret) const
-{
-	ListenPortMap::const_iterator it = this->id_to_listen_ports.find(id);
-
-	if(it == this->id_to_listen_ports.end())
-	{
-		// not a server
-		return -1;
-	}
-
-	ret = it->second;
-	return 0;
-}
-
-void NameService::add_listen_port(unsigned id, int port)
-{
-#ifndef NDEBUG
-	std::cout << "registering listen port " << port << " for node id:" << id << std::endl;
-#endif
-	std::pair<ListenPortMap::iterator, bool> ret = this->id_to_listen_ports.insert(std::make_pair(id, port));
-	(void) ret;
-	// must not have inserted port with the same id previously
-	assert(ret.second);
-	// add a log entry
-	std::stringstream ss;
-	push_i32(ss, id);
-	push_i32(ss, port);
-	LogEntry log = { LISTEN_PORT, ss.str() };
-	this->logs.push_back(log);
-}
-
-int NameService::suggest(const Function &func, unsigned &ret)
+int NameService::suggest(TCP::Sockets &sockets, const Function &func, unsigned &ret)
 {
 	NameIdsWithPivot &pair = this->func_to_ids[func];
 	NameIds &ids = pair.first;
-	cleanup_disconnected_ids(ids);
 
 	if(ids.size() == 0)
 	{
@@ -85,8 +34,51 @@ int NameService::suggest(const Function &func, unsigned &ret)
 	std::advance(it, pair.second);
 	// pivot is between [0,ids.size()]; therefore it must point to something
 	assert(it != ids.end());
-	ret = *it;
-	return 0;
+	// test if the server is still alive
+	Name name;
+	int id = *it;
+
+	// if a function is registered under an id, the id must have existed...
+	if(this->resolve(id, name) < 0)
+	{
+		// this happens when the name entry is cleaned up by other suggest() call for a different function, which cleaned up zombie name entries
+		// remove this candadate
+		ids.erase(id);
+		// recurse with one less candidate
+		return suggest(sockets, func, ret);
+	}
+
+	// bingo! this server is still alive
+	TCP::ScopedConnection conn(sockets, name.ip, name.port);
+
+	if(conn.get_fd() != -1)
+	{
+#ifndef NDEBUG
+		std::cout << "suggestion for func:" << func.name << " to id:" << id << std::endl;
+#endif
+		// bingo! this server is still alive
+		ret = id;
+		return 0;
+	}
+
+	// this server is not alive
+	this->kill(id);
+	ids.erase(id);
+	// recurse with one less candidate
+	return suggest(sockets, func, ret);
+}
+
+NameService::Names NameService::get_all_names() const
+{
+	Names names;
+	LeftMap::const_iterator it = this->name_to_id.begin();
+
+	for(; it != this->name_to_id.end(); it++)
+	{
+		names.push_back(it->first);
+	}
+
+	return names;
 }
 
 void NameService::register_fn(unsigned id, const Function &func)
@@ -166,7 +158,7 @@ int NameService::resolve(const Name &name, unsigned &ret) const
 void NameService::register_name(unsigned id, const Name &name)
 {
 #ifndef NDEBUG
-	std::cout << "Registering name id:" << id << " ip:" << to_ipv4_string(name.ip) << "(" << (unsigned)name.ip << ") port:" << name.port << std::endl;
+	std::cout << "Registering name id:" << id << ' ' << to_format(name) << std::endl;
 #endif
 	// this is an internal method which is called to insert a NEW name
 	this->id_to_name.insert(std::make_pair(id, name));
@@ -188,7 +180,6 @@ void NameService::remove_name(unsigned id)
 	assert(it != this->id_to_name.end());
 	this->name_to_id.erase(it->second);
 	this->id_to_name.erase(id);
-	this->id_to_listen_ports.erase(id);
 }
 
 void NameService::kill(unsigned id)
@@ -220,7 +211,6 @@ Function Function::to_signiture() const
 	return func;
 }
 
-// needed for std::map
 bool operator< (const Function& lhs, const Function& rhs)
 {
 	Function lhs_sig = lhs.to_signiture();
@@ -229,7 +219,6 @@ bool operator< (const Function& lhs, const Function& rhs)
 	       < std::make_pair(rhs_sig.name, rhs_sig.types);
 }
 
-// needed for std::map
 bool operator< (const Name& lhs, const Name& rhs)
 {
 	return std::make_pair(lhs.ip, lhs.port) < std::make_pair(rhs.ip, rhs.port);
@@ -312,12 +301,16 @@ int NameService::apply_logs(std::stringstream &ss)
 {
 	unsigned num_delta = pop_i32(ss);
 	LogEntries entries;
-	std::cout << "number of logs:" << num_delta << std::endl;
+#ifndef NDEBUG
+	std::cout << "applying " << num_delta << " logs:" << std::endl;
+#endif
 
 	for(size_t i = 0; i < num_delta; i++)
 	{
 		unsigned log_version = pop_i32(ss);
-		std::cout << "got log (version:" << log_version << "), my version:" << get_version() << std::endl;
+#ifndef NDEBUG
+		std::cout << "\tgot log - their version:" << log_version << ", my version:" << get_version() << std::endl;
+#endif
 		LogEntry entry = pop_entry(ss);
 		std::stringstream entry_ss(entry.details);
 
@@ -354,23 +347,10 @@ int NameService::apply_logs(std::stringstream &ss)
 				this->register_fn(id, func);
 			}
 			break;
-
-			case LISTEN_PORT:
-			{
-				unsigned id = pop_i32(entry_ss);
-				int port = pop_i32(entry_ss);
-				this->add_listen_port(id, port);
-				break;
-			}
-
-			default:
-				//unreachable
-				assert(false);
-				break;
 		}
 	}
 
-	return -1;
+	return 0;
 }
 
 static void push(std::stringstream &ss, const NameService::LogEntry &entry)

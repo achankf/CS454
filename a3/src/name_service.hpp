@@ -33,7 +33,6 @@ public: // typedefs
 		NEW_NODE,
 		KILL_NODE,
 		NEW_FUNC,
-		LISTEN_PORT // need to keep track of ports used for listening requests instead of the ones sending
 	};
 
 	struct LogEntry
@@ -44,6 +43,7 @@ public: // typedefs
 	typedef std::vector<LogEntry> LogEntries;
 
 	typedef std::set<unsigned> NameIds;
+	typedef std::vector<Name> Names;
 	// the pivot (unsigned) is used for round-robin suggestions
 	typedef std::pair<NameIds, unsigned> NameIdsWithPivot;
 
@@ -57,24 +57,18 @@ private: // data
 	RightMap id_to_name;
 	std::map<Function, NameIdsWithPivot> func_to_ids;
 	LogEntries logs;
-	ListenPortMap id_to_listen_ports;
 
 private: // methods
-
-	// note: Function-to-id mapping is not cleaned up in kill()
-	// when making suggestions, this method must be ran to cleanup
-	// id whose node is disconnected
-	void cleanup_disconnected_ids(NameIds &ids);
 
 	// internal methods to manipulate the bidirectional mapping of name<->id
 	int insert_name(const Name &name);
 	void remove_name(unsigned id);
 
 public: // methods
-	int get_listen_port(unsigned id, int &ret) const;
 	int resolve(const Name &name, unsigned &ret) const;
 	int resolve(unsigned id, Name &ret) const;
-	int suggest(const Function &func, unsigned &ret);
+	int suggest(TCP::Sockets &sockets, const Function &func, unsigned &ret);
+	Names get_all_names() const;
 	unsigned get_version() const;
 
 	// non-binder should update NameService using apply_logs
@@ -86,7 +80,6 @@ public: // methods
 	void kill(unsigned id);
 	void register_fn(unsigned id, const Function &func);
 	void register_name(unsigned id, const Name &name);
-	void add_listen_port(unsigned id, int port);
 };
 
 // utility methods
@@ -101,5 +94,9 @@ bool is_arg_input(int arg_type);
 bool is_arg_output(int arg_type);
 size_t get_arg_car(int arg_type);
 int get_arg_data_type(int arg_type);
+
+// needed for std::map
+bool operator< (const Function& lhs, const Function& rhs);
+bool operator< (const Name& lhs, const Name& rhs);
 
 #endif

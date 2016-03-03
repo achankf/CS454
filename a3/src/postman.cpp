@@ -23,9 +23,10 @@ int Postman::send(int remote_fd, Message &msg)
 	return this->sockets.flush(remote_fd);
 }
 
-int Postman::send_register(int binder_fd, Function &func)
+int Postman::send_register(int binder_fd, int my_id, Function &func)
 {
 	std::stringstream ss;
+	push_i32(ss, my_id);
 	push(ss, func);
 	Message msg = to_message(REGISTER, ss.str());
 	return this->send(binder_fd, msg);
@@ -136,11 +137,18 @@ int Postman::send_ns_update(int remote_fd)
 	return -1;
 }
 
-int Postman::send_terminate(int binder_fd)
+int Postman::send_terminate(int remote_fd)
 {
-	(void) binder_fd;
-	assert(false);
-	return -1;
+	Message msg = to_message(TERMINATE, "");
+	return this->send(remote_fd, msg);
+}
+
+int Postman::send_confirm_terminate(int remote_fd, bool is_terminate)
+{
+	std::stringstream ss;
+	push_i8(ss, is_terminate);
+	Message msg = to_message(CONFIRM_TERMINATE, ss.str());
+	return this->send(remote_fd, msg);
 }
 
 int Postman::sync()
@@ -203,11 +211,20 @@ int Postman::send_iam_server(int binder_fd, int listen_port)
 	return send(binder_fd, msg);
 }
 
-int Postman::reply_iam_server(int remote_fd, unsigned remote_ns_version)
+int Postman::reply_ns_update(int remote_fd, unsigned remote_ns_version)
 {
 	std::stringstream ss;
 	ss << this->ns.get_logs(remote_ns_version);
-	Message msg = to_message(OK_SERVER, ss.str());
+	Message msg = to_message(NS_UPDATE_SENT, ss.str());
+	return send(remote_fd, msg);
+}
+
+int Postman::reply_server_ok(int remote_fd, unsigned id, unsigned remote_ns_version)
+{
+	std::stringstream ss;
+	push_i32(ss, id);
+	ss << this->ns.get_logs(remote_ns_version);
+	Message msg = to_message(SERVER_OK, ss.str());
 	return send(remote_fd, msg);
 }
 
@@ -217,22 +234,23 @@ int Postman::reply_loc_request(int remote_fd, Function &func, unsigned remote_ns
 	std::stringstream ss;
 	Message msg;
 
-	if(this->ns.suggest(func, target_id) < 0)
+	if(this->ns.suggest(this->sockets, func, target_id) < 0)
 	{
+		push_i8(ss, false); // failure
 		// cannot find any server (no suggestion)
 		push_i32(ss, NO_AVAILABLE_SERVER);
 		// sync remote's log anyway
 		ss << this->ns.get_logs(remote_ns_version);
-		msg = to_message(LOC_FAILURE, ss.str());
 	}
 	else
 	{
+		push_i8(ss, true); // success
 		// got a suggestion (with round-robin)
 		push_i32(ss, target_id);
 		ss << this->ns.get_logs(remote_ns_version);
-		msg = to_message(LOC_SUCCESS, ss.str());
 	}
 
+	msg = to_message(LOC_REPLY, ss.str());
 	return send(remote_fd, msg);
 }
 

@@ -32,8 +32,8 @@ public: // typedefs
 	{
 	public: // virtual methods
 		virtual ~Trigger() {}
-		virtual void when_connected(int fd) = 0;
-		virtual void when_disconnected(int fd) = 0;
+		virtual void when_connected(int fd) {}
+		virtual void when_disconnected(int fd) {}
 	};
 
 	struct DataBuffer
@@ -64,12 +64,11 @@ private: // functions
 	// used by connect_remote and bind_and_listen
 	int create_socket();
 
-	// IMPORTANT: this is not idempotent
-	void disconnect(int fd);
-
 public:
 	Sockets();
 	~Sockets();
+
+	void disconnect(int fd);
 
 	// this is important -- if the buffer is not set, every incoming messages will be discarded
 	void set_buffer(DataBuffer *buffer);
@@ -81,7 +80,7 @@ public:
 	int bind_and_listen(int port = 0, int num_listen = 100);
 
 	// used by the client to connect to the server
-	int connect_remote(char *hostname, int port);
+	int connect_remote(const char *hostname, int port);
 	int connect_remote(int ip, int port);
 
 	// flush the write buffer directly, BLOCKING (instead of via sync())
@@ -90,6 +89,21 @@ public:
 	// send all requests in the write buffer to remote,
 	// and read all incoming messages to the read buffer
 	int sync();
+};
+
+// since there are many instances where calls can fail,
+// this class takes advantage of RAII to auto disconnect
+// when the connect is out of scope
+class ScopedConnection
+{
+public: // data
+	int fd;
+	Sockets &sockets;
+public: // helper methods
+	ScopedConnection(Sockets &sockets, int ip, int port);
+	ScopedConnection(Sockets &sockets, const char *hostname, int port);
+	~ScopedConnection();
+	int get_fd() const;
 };
 
 }
