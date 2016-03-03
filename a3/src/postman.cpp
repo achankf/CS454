@@ -47,7 +47,7 @@ int Postman::send_execute(int server_fd, Function &func, void **args)
 		}
 
 		// there is no point in differentiating b/w scalar and array of size 1
-		size_t cardinality = std::max(1u, get_arg_car(arg_type));
+		size_t cardinality = std::max(static_cast<size_t>(1), get_arg_car(arg_type));
 		push_i16(ss, cardinality);
 
 		switch(get_arg_data_type(arg_type))
