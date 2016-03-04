@@ -168,13 +168,9 @@ void push_i64(std::stringstream &ss, long val)
 		buf[5] = data[2];
 		buf[6] = data[1];
 		buf[7] = data[0];
-		ss.write((char*)&buf, 8);
-	}
-	else
-	{
-		// big endian -- just pass it
-		ss.write((char*)&val, 8);
-	}
+	} // else big endian
+
+	ss.write((char*)&val, 8);
 }
 
 void push_f32(std::stringstream &ss, float val)
@@ -187,4 +183,58 @@ void push_f64(std::stringstream &ss, double val)
 {
 	//TODO hope that it works...
 	ss.write((char*)&val, 8);
+}
+
+long pop_i64(std::stringstream &ss)
+{
+	int num = 0x01;
+	char *data = (char*)&num;
+	char buf[8];
+	long ret;
+	char *ret_casted = (char*)&ret;
+	ss.read((char*)&ret, 8);
+
+	if(*data == 0x01) // test the first byte
+	{
+		// little endian -- convert to big endian
+		buf[0] = ret_casted[7];
+		buf[1] = ret_casted[6];
+		buf[2] = ret_casted[5];
+		buf[3] = ret_casted[4];
+		buf[4] = ret_casted[3];
+		buf[5] = ret_casted[2];
+		buf[6] = ret_casted[1];
+		buf[7] = ret_casted[0];
+
+		for(int i = 0; i < 8; i++)
+		{
+			ret_casted[i] = buf[i];
+		}
+	}
+
+	return ret;
+}
+
+short pop_i16(std::stringstream &ss)
+{
+	// assumes ss contains the valid bytes
+	short ret;
+	ss.read((char*)&ret, 2);
+	return ntohs(ret);
+}
+
+float pop_f32(std::stringstream &ss)
+{
+	// assumes ss contains the valid bytes
+	float ret;
+	ss.read((char*)&ret, 4);
+	return ntohs(ret);
+}
+
+double pop_f64(std::stringstream &ss)
+{
+	// assumes ss contains the valid bytes
+	double ret;
+	ss.read((char*)&ret, 8);
+	return ntohs(ret);
 }

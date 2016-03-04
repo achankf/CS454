@@ -23,7 +23,7 @@ int Postman::send(int remote_fd, Message &msg)
 	return this->sockets.flush(remote_fd);
 }
 
-int Postman::send_register(int binder_fd, int my_id, Function &func)
+int Postman::send_register(int binder_fd, int my_id, const Function &func)
 {
 	std::stringstream ss;
 	push_i32(ss, my_id);
@@ -32,7 +32,7 @@ int Postman::send_register(int binder_fd, int my_id, Function &func)
 	return this->send(binder_fd, msg);
 }
 
-int Postman::send_execute(int server_fd, Function &func, void **args)
+int Postman::send_execute(int server_fd, const Function &func, void **args)
 {
 	std::stringstream ss;
 	push(ss, func);
@@ -48,7 +48,6 @@ int Postman::send_execute(int server_fd, Function &func, void **args)
 
 		// there is no point in differentiating b/w scalar and array of size 1
 		size_t cardinality = std::max(static_cast<size_t>(1), get_arg_car(arg_type));
-		push_i16(ss, cardinality);
 
 		switch(get_arg_data_type(arg_type))
 		{
@@ -130,6 +129,79 @@ int Postman::send_execute(int server_fd, Function &func, void **args)
 	return this->send(server_fd, msg);
 }
 
+int Postman::reply_execute(int remote_fd, bool success, const Function &func, void **args, unsigned remote_ns_version)
+{
+	std::stringstream ss;
+
+	// extract output
+	for(size_t i = 0; i < func.types.size(); i++)
+	{
+		int arg_type = func.types[i];
+		void * const argsi = args[i];
+		size_t cardinality = std::max(static_cast<size_t>(1), get_arg_car(arg_type));
+
+		if(!is_arg_output(arg_type))
+		{
+			continue;
+		}
+
+		switch(get_arg_data_type(arg_type))
+		{
+			case ARG_CHAR:
+				for(size_t j = 0; j < cardinality; j++)
+				{
+					push_i8(ss, ((char*)argsi)[j]);
+				}
+
+				break;
+
+			case ARG_SHORT:
+				for(size_t j = 0; j < cardinality; j++)
+				{
+					push_i16(ss, ((short*)args[i])[j]);
+				}
+
+				break;
+
+			case ARG_INT:
+				for(size_t j = 0; j < cardinality; j++)
+				{
+					push_i32(ss, ((int*)args[i])[j]);
+				}
+
+				break;
+
+			case ARG_LONG:
+				for(size_t j = 0; j < cardinality; j++)
+				{
+					push_i64(ss, ((long*)argsi)[j]);
+				}
+
+				break;
+
+			case ARG_DOUBLE:
+				for(size_t j = 0; j < cardinality; j++)
+				{
+					push_f64(ss, ((double*)args[i])[j]);
+				}
+
+				break;
+
+			case ARG_FLOAT:
+				for(size_t j = 0; j < cardinality; j++)
+				{
+					push_f32(ss, ((float*)args[i])[j]);
+				}
+
+				break;
+		}
+	}
+
+	ss << this->ns.get_logs(remote_ns_version);
+	Message msg = to_message(EXECUTE_REPLY, ss.str());
+	return this->send(remote_fd, msg);
+}
+
 int Postman::send_ns_update(int remote_fd)
 {
 	(void) remote_fd;
@@ -195,7 +267,7 @@ int Postman::sync_and_receive_any(Request &ret, int timeout)
 	return 0;
 }
 
-int Postman::send_loc_request(int binder_fd, Function &func)
+int Postman::send_loc_request(int binder_fd, const Function &func)
 {
 	std::stringstream ss;
 	push(ss, func);
@@ -228,7 +300,7 @@ int Postman::reply_server_ok(int remote_fd, unsigned id, unsigned remote_ns_vers
 	return send(remote_fd, msg);
 }
 
-int Postman::reply_loc_request(int remote_fd, Function &func, unsigned remote_ns_version)
+int Postman::reply_loc_request(int remote_fd, const Function &func, unsigned remote_ns_version)
 {
 	unsigned target_id;
 	std::stringstream ss;

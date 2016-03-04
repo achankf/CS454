@@ -11,7 +11,7 @@ binder: $(BINDER_OBJS)
 binder.o: binder.cpp $(HEADERS)
 	$(CXX) $(CXFLAGS) binder.cpp -c
 
-LIBRPC_OBJS = common.o debug.o name_service.o postman.o rpc.o sockets.o
+LIBRPC_OBJS = common.o debug.o name_service.o postman.o rpc.o sockets.o tasks.o
 librpc.a: $(LIBRPC_OBJS)
 	ar rcs librpc.a $(LIBRPC_OBJS)
 
@@ -32,6 +32,9 @@ postman.o: postman.cpp $(HEADERS)
 
 debug.o: debug.cpp $(HEADERS)
 	$(CXX) $(CXFLAGS) debug.cpp -c
+
+tasks.o: tasks.cpp $(HEADERS)
+	$(CXX) $(CXFLAGS) tasks.cpp -c
 
 .phony: style clean
 

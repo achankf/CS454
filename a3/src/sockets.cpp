@@ -140,7 +140,6 @@ int TCP::Sockets::sync()
 				(void) inserted;
 				// fds must be unique; something is wrong here
 				assert(inserted);
-
 #ifndef NDEBUG
 				std::cout << "connected " << remote_fd << std::endl;
 #endif

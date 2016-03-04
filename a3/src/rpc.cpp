@@ -4,6 +4,7 @@
 #include "postman.hpp"
 #include "rpc.h"
 #include "sockets.hpp"
+#include "tasks.hpp"
 #include <cassert>
 #include <cstdlib>
 #include <deque>
@@ -32,10 +33,14 @@ public: //public
 	TCP::Sockets sockets;
 	Postman postman;
 
+	// used by the server to run tasks on a thread pool
+	Tasks tasks;
+
 	// server (only set when the process is a server)
 	int server_fd;
 	int server_id;
 	bool is_terminate;
+	Name server_name;
 
 	// binder (used by both clients and servers)
 	const char *binder_hostname;
@@ -62,10 +67,11 @@ public: //methods
 	// wait for desired request (-1 means timeout; 0 means ok)
 	// desired contains flags of Postman::MessageType
 	int wait_for_desired(int desired, Postman::Request &ret, int timeout = DEFAULT_TIMEOUT);
-	void handle_update_log(int remote_fd);
 
 	// this is called after server_name is reserved (either by the binder or cache)
 	int rpc_call_helper(Name &server_name, Function &func, void **args);
+
+	int run(Name &server_name, Function &func, std::stringstream &args);
 } g;
 
 // ============== codes below ==============
@@ -84,27 +90,28 @@ int rpcInit()
 		return -1;
 	}
 
-	int port;
+	int server_port;
 	std::string server_hostname;
-	get_hostname(g.server_fd, server_hostname, port);
+	get_hostname(g.server_fd, server_hostname, server_port);
 #ifndef NDEBUG
 	print_host_info(g.server_fd,"SERVER");
 #endif
-	TCP::ScopedConnection conn(g.sockets, g.binder_hostname, g.binder_port);
-	int binder_fd = conn.get_fd();
-
-	if(binder_fd < 0)
 	{
-		// cannot connect to the binder
-		return -1;
-	}
+		TCP::ScopedConnection conn(g.sockets, g.binder_hostname, g.binder_port);
+		int binder_fd = conn.get_fd();
 
-	if(g.postman.send_iam_server(binder_fd, port) < 0)
-	{
-		// should not happen...
-		return -1;
-	}
+		if(binder_fd < 0)
+		{
+			// cannot connect to the binder
+			return -1;
+		}
 
+		if(g.postman.send_iam_server(binder_fd, server_port) < 0)
+		{
+			// should not happen...
+			return -1;
+		}
+	}
 	Postman::Request req;
 
 	if(g.wait_for_desired(Postman::SERVER_OK, req) < 0 || g.is_terminate)
@@ -116,6 +123,8 @@ int rpcInit()
 	std::stringstream ss(req.message.str);
 	g.server_id = pop_i32(ss);
 	g.ns.apply_logs(ss);
+	// resolve "my" own name for future uses
+	g.ns.resolve(g.server_id, g.server_name);
 	return 0;
 }
 
@@ -192,13 +201,10 @@ int rpcCall(char* name, int* argTypes, void** args)
 		return g.rpc_call_helper(name, func, args);;
 	}
 
-	assert(!is_success);
-	Postman::ErrorNo err = static_cast<Postman::ErrorNo>(pop_i32(ss));
-
-	switch(err)
+	switch(static_cast<Postman::ErrorNo>(pop_i32(ss)))
 	{
 		case Postman::NO_AVAILABLE_SERVER:
-			// do something?
+			// do/print something?
 			return -1;
 
 		default:
@@ -293,7 +299,11 @@ int rpcExecute()
 		if(remote_ns_version > g.ns.get_version())
 		{
 			// the client has more update-to-date logs, ask for it
-			g.handle_update_log(remote_fd);
+			// doesn't check for return value, let wait_for_desired() to handle it
+#ifndef NDEBUG
+			std::cout << "client has newer logs (their:" << remote_ns_version << ", mine:" << g.ns.get_version() << "), ask for updates" << std::endl;
+#endif
+			g.postman.send_ns_update(remote_fd);
 		}
 
 		if(g.get_func_skel(func, skel) < 0)
@@ -303,10 +313,11 @@ int rpcExecute()
 			return -1;
 		}
 
-#ifndef NDEBUG
-		std::cout << "executing " << func.name << " func_addr:" << (void*)skel << std::endl;
-#endif
-		//TODO
+		// copy input
+		std::string data(req.message.str.substr(ss.tellg()));
+		Tasks::Task t(g.postman, remote_fd, g.server_name, func, skel, data, remote_ns_version);
+		// push call to the task queue and let other threads to handle it
+		g.tasks.push(t);
 	}
 
 	// server terminates gracefully
@@ -441,25 +452,4 @@ int Global::wait_for_desired(int desired, Postman::Request &ret, int timeout)
 
 	// is terminate
 	return -1; // didn't get the desired request, but is terminating
-}
-
-void Global::handle_update_log(int remote_fd)
-{
-	// doing best-effort updates; ignore failures
-	if(postman.send_ns_update(remote_fd) < 0)
-	{
-		// doesn't matter -- ignore
-		return;
-	}
-
-	Postman::Request req;
-
-	if(wait_for_desired(Postman::NS_UPDATE_SENT, req) < 0)
-	{
-		// again doesn't matter -- ignore
-		return;
-	}
-
-	std::stringstream ss(req.message.str);
-	ns.apply_logs(ss);
 }

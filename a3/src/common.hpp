@@ -34,8 +34,12 @@ int get_peer_info(int fd, Name &ret);
 int connect_to_binder(TCP::Sockets &sockets);
 
 // buffer-related helpers
-int pop_i32(std::stringstream &ss);
 char pop_i8(std::stringstream &ss);
+int pop_i32(std::stringstream &ss);
+long pop_i64(std::stringstream &ss);
+short pop_i16(std::stringstream &ss);
+float pop_f32(std::stringstream &ss);
+double pop_f64(std::stringstream &ss);
 std::string pop_string(std::stringstream &ss);
 std::string raw_read(std::stringstream &ss, size_t size);
 void push(std::stringstream &ss, const std::string &str);
