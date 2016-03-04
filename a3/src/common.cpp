@@ -168,9 +168,12 @@ void push_i64(std::stringstream &ss, long val)
 		buf[5] = data[2];
 		buf[6] = data[1];
 		buf[7] = data[0];
-	} // else big endian
-
-	ss.write((char*)&val, 8);
+		ss.write(buf, 8);
+	}
+	else
+	{
+		ss.write((char*)&val, 8);
+	}
 }
 
 void push_f32(std::stringstream &ss, float val)
