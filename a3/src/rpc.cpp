@@ -9,10 +9,8 @@
 #include <cstdlib>
 #include <deque>
 #include <map>
-
-#ifndef NDEBUG
+#include <set>
 #include <iostream>
-#endif
 
 // ============== global variables ==============
 
@@ -24,17 +22,14 @@ public: // typedefs
 	typedef std::map<Function, skeleton> FuncToSkelMap;
 
 private: // private
+	std::set<Function> real_signitures;
 	FuncToSkelMap function_map; // for server only
 
 public: //public
 
 	// network structures
 	NameService ns;
-	TCP::Sockets sockets;
 	Postman postman;
-
-	// used by the server to run tasks on a thread pool
-	Tasks tasks;
 
 	// server (only set when the process is a server)
 	int server_fd;
@@ -48,7 +43,7 @@ public: //public
 
 public: //methods
 	Global()
-		: postman(sockets, ns),
+		: postman(ns),
 		  server_fd(-1),
 		  server_id(-1),
 		  is_terminate(false),
@@ -56,13 +51,12 @@ public: //methods
 		  binder_port(strtol(getenv("BINDER_PORT"), NULL, 10))
 	{
 		// this constructor should not throw exception
-		this->sockets.set_buffer(&postman);
 		assert(binder_hostname != NULL);
 	}
 
 	// set and retreive skeletons for servers (only)
 	void update_func_skel(const Function &func, const skeleton &skel);
-	int get_func_skel(const Function &func, skeleton &ret);
+	int get_func_skel(const Function &func, std::pair<Function,skeleton> &ret);
 
 	// wait for desired request (-1 means timeout; 0 means ok)
 	// desired contains flags of Postman::MessageType
@@ -70,8 +64,6 @@ public: //methods
 
 	// this is called after server_name is reserved (either by the binder or cache)
 	int rpc_call_helper(Name &server_name, Function &func, void **args);
-
-	int run(Name &server_name, Function &func, std::stringstream &args);
 } g;
 
 // ============== codes below ==============
@@ -81,7 +73,7 @@ int rpcInit()
 #ifndef NDEBUG
 	std::cout << "RPC INIT" << std::endl;
 #endif
-	g.server_fd = g.sockets.bind_and_listen();
+	g.server_fd = g.postman.bind_and_listen();
 
 	if(g.server_fd < 0)
 	{
@@ -96,30 +88,33 @@ int rpcInit()
 #ifndef NDEBUG
 	print_host_info(g.server_fd,"SERVER");
 #endif
+	ScopedConnection conn(g.postman, g.binder_hostname, g.binder_port);
+	int binder_fd = conn.get_fd();
+
+	if(binder_fd < 0)
 	{
-		TCP::ScopedConnection conn(g.sockets, g.binder_hostname, g.binder_port);
-		int binder_fd = conn.get_fd();
-
-		if(binder_fd < 0)
-		{
-			// cannot connect to the binder
-			return -1;
-		}
-
-		if(g.postman.send_iam_server(binder_fd, server_port) < 0)
-		{
-			// should not happen...
-			return -1;
-		}
-	}
-	Postman::Request req;
-
-	if(g.wait_for_desired(Postman::SERVER_OK, req) < 0 || g.is_terminate)
-	{
-		// timeout
+		// cannot connect to the binder
+		assert(false);
 		return -1;
 	}
 
+	if(g.postman.send_iam_server(binder_fd, server_port) < 0)
+	{
+		// should not happen...
+		assert(false);
+		return -1;
+	}
+
+	Postman::Request req;
+
+	if(g.wait_for_desired(Postman::SERVER_OK, req) < 0)
+	{
+		// timeout
+		assert(false);
+		return -1;
+	}
+
+	std::cout << "C" << std::endl;
 	std::stringstream ss(req.message.str);
 	g.server_id = pop_i32(ss);
 	g.ns.apply_logs(ss);
@@ -130,7 +125,7 @@ int rpcInit()
 
 int Global::rpc_call_helper(Name &server_name, Function &func, void **args)
 {
-	TCP::ScopedConnection target_conn(g.sockets, server_name.ip, server_name.port);
+	ScopedConnection target_conn(g.postman, server_name.ip, server_name.port);
 	int target_fd = target_conn.get_fd();
 
 	if(target_fd < 0)
@@ -146,9 +141,84 @@ int Global::rpc_call_helper(Name &server_name, Function &func, void **args)
 		return -1;
 	}
 
-	//TODO
-	//assert(false);
-	return -1;
+	Postman::Request req;
+
+	if(g.wait_for_desired(Postman::EXECUTE_REPLY, req) < 0)
+	{
+		return -1;
+	}
+
+	std::stringstream ss(req.message.str);
+	bool success = pop_i8(ss);
+
+print_function(func);
+
+	for(size_t i = 0; i < func.types.size(); i++)
+	{
+		int arg_type = func.types[i];
+		size_t cardinality = get_arg_car(arg_type);
+
+		if(is_arg_output(arg_type))
+		{
+			switch(get_arg_data_type(arg_type))
+			{
+				case ARG_CHAR:
+					for(size_t j = 0; j < cardinality; j++)
+					{
+						((char*)args[i])[j] = pop_i8(ss);
+					}
+
+					break;
+
+				case ARG_SHORT:
+					for(size_t j = 0; j < cardinality; j++)
+					{
+						short *argi = reinterpret_cast<short*>(args[i]);
+						argi[j] = pop_i16(ss);
+					}
+
+					break;
+
+				case ARG_INT:
+					for(size_t j = 0; j < cardinality; j++)
+					{
+						int *argi = reinterpret_cast<int*>(args[i]);
+						argi[j] = pop_i32(ss);
+					}
+
+					break;
+
+				case ARG_LONG:
+					for(size_t j = 0; j < cardinality; j++)
+					{
+						long *argi = reinterpret_cast<long*>(args[i]);
+						argi[j] = pop_i64(ss);
+					}
+
+					break;
+
+				case ARG_DOUBLE:
+					for(size_t j = 0; j < cardinality; j++)
+					{
+						double *argi = reinterpret_cast<double*>(args[i]);
+						argi[j] = pop_f64(ss);
+					}
+
+					break;
+
+				case ARG_FLOAT:
+					for(size_t j = 0; j < cardinality; j++)
+					{
+						float *argi = reinterpret_cast<float*>(args[i]);
+						argi[j] = pop_f32(ss);
+					}
+
+					break;
+			}
+		}
+	}
+
+	return success ? 0 : -1;
 }
 
 int rpcCall(char* name, int* argTypes, void** args)
@@ -160,7 +230,7 @@ int rpcCall(char* name, int* argTypes, void** args)
 	Function func = to_function(name, argTypes);
 	// send a location request to the binder
 	{
-		TCP::ScopedConnection conn(g.sockets, g.binder_hostname, g.binder_port);
+		ScopedConnection conn(g.postman, g.binder_hostname, g.binder_port);
 		int binder_fd = conn.get_fd();
 
 		if(binder_fd < 0)
@@ -176,7 +246,7 @@ int rpcCall(char* name, int* argTypes, void** args)
 			return -1;
 		}
 
-		if(g.wait_for_desired(Postman::LOC_REPLY, req) < 0 || g.is_terminate)
+		if(g.wait_for_desired(Postman::LOC_REPLY, req) < 0)
 		{
 			// timeout
 			return -1;
@@ -219,7 +289,7 @@ int rpcCacheCall(char* name, int* argTypes, void** args)
 	(void)args;
 	//TODO
 	assert(false);
-	TCP::ScopedConnection conn(g.sockets, g.binder_hostname, g.binder_port);
+	ScopedConnection conn(g.postman, g.binder_hostname, g.binder_port);
 	int binder_fd = conn.get_fd();
 
 	if(binder_fd < 0)
@@ -239,7 +309,7 @@ int rpcRegister(char* name, int* argTypes, skeleton f)
 #endif
 	// only the server calls this methods, and hello is sent during init()
 	Function func = to_function(name, argTypes);
-	TCP::ScopedConnection conn(g.sockets, g.binder_hostname, g.binder_port);
+	ScopedConnection conn(g.postman, g.binder_hostname, g.binder_port);
 	int binder_fd = conn.get_fd();
 
 	if(binder_fd < 0)
@@ -259,7 +329,7 @@ int rpcRegister(char* name, int* argTypes, skeleton f)
 
 	Postman::Request req;
 
-	if(g.wait_for_desired(Postman::REGISTER_DONE, req) < 0 || g.is_terminate)
+	if(g.wait_for_desired(Postman::REGISTER_DONE, req) < 0)
 	{
 		// cannot get a reply...
 		return -1;
@@ -278,13 +348,15 @@ int rpcExecute()
 #ifndef NDEBUG
 	std::cout << "RPC EXECUTE" << std::endl;
 #endif
+	// used by the server to run tasks on a thread pool
+	Tasks tasks;
 
 	// only the server calls this methods, and hello is sent during init()
 	while(!g.is_terminate)
 	{
 		Postman::Request req;
 
-		if(g.wait_for_desired(Postman::EXECUTE, req) < 0 || g.is_terminate)
+		if(g.wait_for_desired(Postman::EXECUTE, req) < 0)
 		{
 			// timeout or decided to terminated
 			continue;
@@ -294,7 +366,6 @@ int rpcExecute()
 		unsigned remote_ns_version = req.message.ns_version;
 		std::stringstream ss(req.message.str);
 		Function func = func_from_sstream(ss);
-		skeleton skel;
 
 		if(remote_ns_version > g.ns.get_version())
 		{
@@ -306,7 +377,9 @@ int rpcExecute()
 			g.postman.send_ns_update(remote_fd);
 		}
 
-		if(g.get_func_skel(func, skel) < 0)
+		std::pair<Function, skeleton> func_info;
+
+		if(g.get_func_skel(func, func_info) < 0)
 		{
 			// impossible -- client knows this function exists and server has the latest logs about its functions
 			assert(false);
@@ -315,11 +388,13 @@ int rpcExecute()
 
 		// copy input
 		std::string data(req.message.str.substr(ss.tellg()));
-		Tasks::Task t(g.postman, remote_fd, g.server_name, func, skel, data, remote_ns_version);
+		Tasks::Task t(g.postman, remote_fd, g.server_name, func_info.first, func_info.second, data, remote_ns_version);
 		// push call to the task queue and let other threads to handle it
-		g.tasks.push(t);
+		tasks.push(t);
 	}
 
+	// kill all threads
+	tasks.terminate();
 	// server terminates gracefully
 	return 0;
 }
@@ -329,7 +404,7 @@ int rpcTerminate()
 #ifndef NDEBUG
 	std::cout << "RPC TERMINATE" << std::endl;
 #endif
-	TCP::ScopedConnection conn(g.sockets, g.binder_hostname, g.binder_port);
+	ScopedConnection conn(g.postman, g.binder_hostname, g.binder_port);
 	int binder_fd = conn.get_fd();
 
 	if(binder_fd < 0)
@@ -346,12 +421,13 @@ void Global::update_func_skel(const Function &func, const skeleton &skel)
 #ifndef NDEBUG
 	std::cout << "local: registering " << func.name << " with skel address:" << (void*)skel << std::endl;
 #endif
-	Function sig = func.to_signiture();
+	this->real_signitures.erase(func); // remove old one if existed
+	this->real_signitures.insert(func); // insert the new signiture
 	// discard previous skeleton if existed
-	this->function_map[sig] = skel;
+	this->function_map[func] = skel;
 }
 
-int Global::get_func_skel(const Function &func, skeleton &ret)
+int Global::get_func_skel(const Function &func, std::pair<Function,skeleton> &ret)
 {
 	Function sig = func.to_signiture();
 	FuncToSkelMap::iterator it = this->function_map.find(sig);
@@ -363,7 +439,9 @@ int Global::get_func_skel(const Function &func, skeleton &ret)
 		return -1;
 	}
 
-	ret = it->second;
+	std::set<Function>::iterator fit = this->real_signitures.find(sig);
+	assert(fit != this->real_signitures.end());
+	ret = std::make_pair(*fit, it->second);
 	return 0;
 }
 
@@ -407,7 +485,7 @@ int Global::wait_for_desired(int desired, Postman::Request &ret, int timeout)
 				// the server got a TERMINATE request, but the only thing we know
 				// about the binder is the hostname and the listening port -- we can't
 				// trust the port that is used to send this message.
-				TCP::ScopedConnection conn(sockets, binder_hostname, binder_port);
+				ScopedConnection conn(postman, binder_hostname, binder_port);
 				int binder_fd = conn.get_fd();
 
 				if(binder_fd < 0)

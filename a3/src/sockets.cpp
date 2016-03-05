@@ -1,3 +1,4 @@
+#include "common.hpp"
 #include "sockets.hpp"
 #include <algorithm>
 #include <cassert>
@@ -24,12 +25,10 @@ TCP::Sockets::~Sockets()
 	{
 		int fd = *it;
 		assert(fd != -1);
-
-		if(fd != this->local_fd)
-		{
-			// close connections
-			close(fd);
-		}
+		if (fd != this->local_fd) {
+		// close connections
+		close(fd);
+	}
 	}
 
 	if(this->local_fd != -1)
@@ -114,7 +113,10 @@ int TCP::Sockets::sync()
 		return retval;
 	}
 
-	for(Fds::iterator it = this->connected_fds.begin(); it != this->connected_fds.end(); it++)
+	Fds local_copy;
+	local_copy = this->connected_fds;
+
+	for(Fds::iterator it = local_copy.begin(); it != local_copy.end(); it++)
 	{
 		int fd = *it;
 
@@ -146,15 +148,14 @@ int TCP::Sockets::sync()
 			}
 			else
 			{
-				// sockets for remote connections
-				size_t count = read(fd, buf, sizeof(buf));
+				int count = read(fd, buf, sizeof(buf));
 
 				if(count == 0)
 				{
 					// remote sent EOF -- disconnect remote
 					this->disconnect(fd);
 				}
-				else
+				else if(count > 0)
 				{
 					std::string buf_str(buf, count);
 
@@ -169,8 +170,12 @@ int TCP::Sockets::sync()
 
 		if(FD_ISSET(fd, &writefds))
 		{
-			// ignore return value
-			flush(fd);
+			if(this->connected_fds.find(fd) != this->connected_fds.end())
+			{
+				// double-check in case the fd is closed
+				// ignore return value
+				this->flush(fd);
+			}
 		}
 	}
 
@@ -190,7 +195,7 @@ int TCP::Sockets::flush(int dst_fd)
 		return 0;
 	}
 
-	std::string msg = this->buffer->write_avail(dst_fd);
+	const std::string msg = this->buffer->write_avail(dst_fd);
 
 	if(msg.empty())
 	{
@@ -198,11 +203,10 @@ int TCP::Sockets::flush(int dst_fd)
 		return -1;
 	}
 
-	char *buf = new char[msg.size() + 1];
-	const char *c_str = msg.c_str();
-	std::copy(c_str, (c_str + msg.size()), buf);
+	char *buf = new char[msg.size()];
+	memcpy(buf, msg.c_str(), msg.size());
 	size_t num_written = write(dst_fd, buf, msg.size());
-	delete buf;
+	delete [] buf;
 
 	if(num_written == msg.size())
 	{
@@ -234,19 +238,17 @@ int TCP::Sockets::connect_remote(const char *hostname, int port)
 {
 	// resolve IP address
 	int ip;
+	struct hostent* server_entity;
+	server_entity = gethostbyname(hostname);
+
+	if(server_entity == NULL)
 	{
-		struct hostent* server_entity;
-		server_entity = gethostbyname(hostname);
-
-		if(server_entity == NULL)
-		{
-			// should not happen in the student environment
-			assert(false);
-			return -1;
-		}
-
-		memcpy(&ip, server_entity->h_addr, server_entity->h_length);
+		// should not happen in the student environment
+		assert(false);
+		return -1;
 	}
+
+	memcpy(&ip, server_entity->h_addr, server_entity->h_length);
 	return this->connect_remote(ip, port);
 }
 
@@ -257,6 +259,12 @@ int TCP::Sockets::connect_remote(int ip, int port)
 	remote_info.sin_port = htons(port);
 	memcpy(&remote_info.sin_addr, &ip, sizeof(int));
 	int temp_fd = this->create_socket();
+
+	if(temp_fd < 0)
+	{
+		assert(false);
+		return -1;
+	}
 
 	if(connect(temp_fd, (struct sockaddr *)&remote_info, sizeof(remote_info)) < 0)
 	{
@@ -282,25 +290,11 @@ void TCP::Sockets::disconnect(int fd)
 		return;
 	}
 
-	close(fd);
 	this->connected_fds.erase(it);
+	close(fd);
 }
 
 void TCP::Sockets::set_buffer(DataBuffer *buffer)
 {
 	this->buffer = buffer;
-}
-
-TCP::ScopedConnection::ScopedConnection(TCP::Sockets &sockets, int ip, int port) : fd(sockets.connect_remote(ip, port)), sockets(sockets) {}
-
-TCP::ScopedConnection::ScopedConnection(TCP::Sockets &sockets, const char *hostname, int port) : fd(sockets.connect_remote(hostname, port)), sockets(sockets) {}
-
-TCP::ScopedConnection::~ScopedConnection()
-{
-	sockets.disconnect(fd); // fd can be -1; Sockets ignore bad fds
-}
-
-int TCP::ScopedConnection::get_fd() const
-{
-	return fd;
 }

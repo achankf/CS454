@@ -1,16 +1,10 @@
 #ifndef _common_hpp_
 #define _common_hpp_
 
+#include "config.hpp"
+#include <pthread.h>
 #include <sstream>
 #include <string>
-
-#define DEBUG_PORT 42391
-#define DEFAULT_TIMEOUT 600
-
-namespace TCP
-{
-class Sockets;
-}
 
 struct Name;
 
@@ -24,14 +18,21 @@ public: // methods
 	bool is_timeout() const;
 };
 
+class ScopedLock
+{
+private: // references
+	pthread_mutex_t &mutex;
+public:
+	ScopedLock(pthread_mutex_t &mutex);
+	~ScopedLock();
+};
+
 // get the hostname and port # for the SERVER ONLY
 // note: they don't check for errors
 void get_hostname(int fd, std::string &hostname, int &port);
 void print_host_info(int fd, const char *prefix);
 
 int get_peer_info(int fd, Name &ret);
-
-int connect_to_binder(TCP::Sockets &sockets);
 
 // buffer-related helpers
 char pop_i8(std::stringstream &ss);

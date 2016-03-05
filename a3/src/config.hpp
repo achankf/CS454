@@ -1,6 +1,7 @@
 #ifndef _config_hpp_
 #define _config_hpp_
 
-#define MAX_THREADS 100
+#define DEFAULT_TIMEOUT 600
+#define MAX_THREADS 20
 
 #endif

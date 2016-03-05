@@ -162,6 +162,13 @@ int main() {
   if (getchar() == 'y')
     rpcTerminate();
 
+	free(args0);
+	free(args1);
+	free(args2);
+	free(args3);
+	free(args4);
+	free(return2);
+
   /* end of client.c */
   return 0;
 }

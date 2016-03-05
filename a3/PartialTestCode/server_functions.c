@@ -33,6 +33,7 @@ char* f2(float a, double b) {
   b = modf(b, &bi);
 
   str1 = (char *)malloc(100);
+	memset(str1, 0, 100);
 
   sprintf(str1, "%lld%lld", (long long)ai, (long long)bi);
 

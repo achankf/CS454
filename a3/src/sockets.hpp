@@ -56,6 +56,9 @@ private: // functions
 	// used by connect_remote and bind_and_listen
 	int create_socket();
 
+	// unsynchronized version of the public methods
+	int flush_helper(int dst_fd);
+
 public:
 	Sockets();
 	~Sockets();
@@ -78,21 +81,6 @@ public:
 	// send all requests in the write buffer to remote,
 	// and read all incoming messages to the read buffer
 	int sync();
-};
-
-// since there are many instances where calls can fail,
-// this class takes advantage of RAII to auto disconnect
-// when the connect is out of scope
-class ScopedConnection
-{
-public: // data
-	int fd;
-	Sockets &sockets;
-public: // helper methods
-	ScopedConnection(Sockets &sockets, int ip, int port);
-	ScopedConnection(Sockets &sockets, const char *hostname, int port);
-	~ScopedConnection();
-	int get_fd() const;
 };
 
 }

@@ -21,7 +21,9 @@ int f1_Skel(int *argTypes, void **args) {
 int f2_Skel(int *argTypes, void **args) {
 
   /* (char *)*args = f2( *((float *)(*(args + 1))), *((double *)(*(args + 2))) ); */
-  *args = f2( *((float *)(*(args + 1))), *((double *)(*(args + 2))) );
+  char *temp = f2( *((float *)(*(args + 1))), *((double *)(*(args + 2))) );
+	memcpy(*args, temp, 100);
+	free(temp);
 
   return 0;
 }

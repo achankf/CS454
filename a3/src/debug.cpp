@@ -111,16 +111,13 @@ std::string format_arg(int arg_type)
 		ss << "output ";
 	}
 
-	size_t size = get_arg_car(arg_type);
-
-	if(size > 0)
+	if(is_arg_scalar(arg_type))
 	{
-		ss << "array(" << size << ") ";
+		ss << "scalar ";
 	}
 	else
 	{
-		assert(size == 0);
-		ss << "scalar ";
+		ss << "array(" << get_arg_car(arg_type) << ") ";
 	}
 
 	return ss.str();

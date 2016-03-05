@@ -24,7 +24,7 @@ void terminate_servers(Postman &postman)
 
 	for(; it != names.end(); it++)
 	{
-		TCP::ScopedConnection conn(postman.sockets, it->ip, it->port);
+		ScopedConnection conn(postman, it->ip, it->port);
 		int fd = conn.get_fd();
 
 		if(postman.send_terminate(fd) < 0)
@@ -34,7 +34,7 @@ void terminate_servers(Postman &postman)
 		}
 
 		Postman::Request req;
-		Timer timer;
+		Timer timer(1);
 
 		while(!timer.is_timeout())
 		{
@@ -126,10 +126,8 @@ int handle_request(Postman &postman, Postman::Request &req)
 int main()
 {
 	NameService ns;
-	TCP::Sockets sockets;
-	Postman postman(sockets, ns);
-	sockets.set_buffer(&postman);
-	int fd = sockets.bind_and_listen();
+	Postman postman(ns);
+	int fd = postman.bind_and_listen();
 	print_host_info(fd,"BINDER");
 
 	while(true)

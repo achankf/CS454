@@ -11,15 +11,35 @@
 
 static void push(std::stringstream &ss, Postman::Message &msg);
 
-Postman::Postman(TCP::Sockets &sockets, NameService &ns) :
-	sockets(sockets),
+Postman::Postman(NameService &ns) :
 	ns(ns)
 {
+	int retval = pthread_mutex_init(&this->asm_buf_mutex, NULL);
+	assert(retval == 0);
+	retval = pthread_mutex_init(&this->soc_mutex, NULL);
+	assert(retval == 0);
+	retval = pthread_mutex_init(&this->incoming_mutex, NULL);
+	assert(retval == 0);
+	retval = pthread_mutex_init(&this->outgoing_mutex, NULL);
+	assert(retval == 0);
+	this->sockets.set_buffer(this);
+}
+
+Postman::~Postman()
+{
+	pthread_mutex_destroy(&this->asm_buf_mutex);
+	pthread_mutex_destroy(&this->soc_mutex);
+	pthread_mutex_destroy(&this->incoming_mutex);
+	pthread_mutex_destroy(&this->outgoing_mutex);
 }
 
 int Postman::send(int remote_fd, Message &msg)
 {
-	this->outgoing[remote_fd].push(msg);
+	{
+		ScopedLock lock(this->outgoing_mutex);
+		this->outgoing[remote_fd].push(msg);
+	}
+	ScopedLock lock(this->soc_mutex);
 	return this->sockets.flush(remote_fd);
 }
 
@@ -47,7 +67,8 @@ int Postman::send_execute(int server_fd, const Function &func, void **args)
 		}
 
 		// there is no point in differentiating b/w scalar and array of size 1
-		size_t cardinality = std::max(static_cast<size_t>(1), get_arg_car(arg_type));
+		size_t cardinality = get_arg_car(arg_type);
+std::cout << "????????? i:" << i << " " << cardinality << std::endl;
 
 		switch(get_arg_data_type(arg_type))
 		{
@@ -113,7 +134,7 @@ int Postman::send_execute(int server_fd, const Function &func, void **args)
 
 			case ARG_FLOAT:
 			{
-				double *argsi = (double*)args[i];
+				float *argsi = (float*)args[i];
 
 				for(size_t j = 0; j < cardinality; j++)
 				{
@@ -132,13 +153,14 @@ int Postman::send_execute(int server_fd, const Function &func, void **args)
 int Postman::reply_execute(int remote_fd, bool success, const Function &func, void **args, unsigned remote_ns_version)
 {
 	std::stringstream ss;
+	push_i8(ss, success);
 
 	// extract output
 	for(size_t i = 0; i < func.types.size(); i++)
 	{
 		int arg_type = func.types[i];
 		void * const argsi = args[i];
-		size_t cardinality = std::max(static_cast<size_t>(1), get_arg_car(arg_type));
+		size_t cardinality = get_arg_car(arg_type);
 
 		if(!is_arg_output(arg_type))
 		{
@@ -204,9 +226,8 @@ int Postman::reply_execute(int remote_fd, bool success, const Function &func, vo
 
 int Postman::send_ns_update(int remote_fd)
 {
-	(void) remote_fd;
-	assert(false);
-	return -1;
+	Message msg = to_message(ASK_NS_UPDATE, "");
+	return this->send(remote_fd, msg);
 }
 
 int Postman::send_terminate(int remote_fd)
@@ -221,11 +242,6 @@ int Postman::send_confirm_terminate(int remote_fd, bool is_terminate)
 	push_i8(ss, is_terminate);
 	Message msg = to_message(CONFIRM_TERMINATE, ss.str());
 	return this->send(remote_fd, msg);
-}
-
-int Postman::sync()
-{
-	return this->sockets.sync();
 }
 
 Postman::Message Postman::to_message(Postman::MessageType type, std::string msg)
@@ -247,11 +263,15 @@ int Postman::sync_and_receive_any(Request &ret, int timeout)
 	// busy-wait until "good to see you" reply is back
 	while(this->receive_any(ret) < 0)
 	{
-		if(this->sync() < 0)
 		{
-			// some error occurred
-			//TODO ???
-			assert(false);
+			ScopedLock lock(this->soc_mutex);
+
+			if(this->sockets.sync() < 0)
+			{
+				// some error occurred
+				//TODO ???
+				assert(false);
+			}
 		}
 
 		if(timer.is_timeout())
@@ -306,20 +326,19 @@ int Postman::reply_loc_request(int remote_fd, const Function &func, unsigned rem
 	std::stringstream ss;
 	Message msg;
 
-	if(this->ns.suggest(this->sockets, func, target_id) < 0)
+	if(this->ns.suggest(*this, func, target_id) < 0)
 	{
 		push_i8(ss, false); // failure
+		ss << this->ns.get_logs(remote_ns_version);
 		// cannot find any server (no suggestion)
 		push_i32(ss, NO_AVAILABLE_SERVER);
-		// sync remote's log anyway
-		ss << this->ns.get_logs(remote_ns_version);
 	}
 	else
 	{
 		push_i8(ss, true); // success
+		ss << this->ns.get_logs(remote_ns_version);
 		// got a suggestion (with round-robin)
 		push_i32(ss, target_id);
-		ss << this->ns.get_logs(remote_ns_version);
 	}
 
 	msg = to_message(LOC_REPLY, ss.str());
@@ -329,7 +348,13 @@ int Postman::reply_loc_request(int remote_fd, const Function &func, unsigned rem
 void Postman::read_avail(int fd, const std::string &got)
 {
 	std::stringstream ss(got);
-	Message &req_buf = this->asmBuf[fd];
+	ScopedLock lock(this->asm_buf_mutex);
+	Message &req_buf = this->asm_buf[fd];
+
+	if (got.empty()) {
+		assert(false);
+		return;
+	}
 
 	if(req_buf.str.empty())
 	{
@@ -347,20 +372,25 @@ void Postman::read_avail(int fd, const std::string &got)
 	ss.read(buf, remaining);
 	size_t num_read = static_cast<size_t>(ss.gcount());
 	req_buf.str.append(buf, num_read);
-	delete buf;
+	delete [] buf;
 
 	if(num_read == remaining)
 	{
 		// this request is ready
 		Request req = { fd, req_buf }; // copy message
-		incoming.push(req);
+		{
+			ScopedLock(this->incoming_mutex);
+			incoming.push(req);
+		}
 		// remove the temporary object in the assembler
-		this->asmBuf.erase(fd);
+		this->asm_buf.erase(fd);
 	}
 }
 
 int Postman::receive_any(Request &ret)
 {
+	ScopedLock lock(this->incoming_mutex);
+
 	if(this->incoming.empty())
 	{
 		return -1;
@@ -375,14 +405,16 @@ int Postman::receive_any(Request &ret)
 const std::string Postman::write_avail(int fd)
 {
 	std::stringstream ss;
-	std::queue<Message> &requests = this->outgoing[fd];
-
-	while(!requests.empty())
 	{
-		push(ss, requests.front());
-		requests.pop();
-	}
+		ScopedLock lock(this->outgoing_mutex);
+		std::queue<Message> &requests = this->outgoing[fd];
 
+		while(!requests.empty())
+		{
+			push(ss, requests.front());
+			requests.pop();
+		}
+	}
 	return ss.str();
 }
 
@@ -392,4 +424,42 @@ static void push(std::stringstream &ss, Postman::Message &msg)
 	push_i32(ss, msg.msg_type);
 	push_i32(ss, msg.size);
 	ss.write(msg.str.c_str(), msg.str.size());
+}
+
+int Postman::connect_remote(const char *hostname, int port)
+{
+	ScopedLock lock(this->soc_mutex);
+	return this->sockets.connect_remote(hostname, port);
+}
+
+int Postman::connect_remote(int ip, int port)
+{
+	ScopedLock lock(this->soc_mutex);
+	return this->sockets.connect_remote(ip, port);
+}
+
+int Postman::bind_and_listen(int port, int num_listen)
+{
+	ScopedLock lock(this->soc_mutex);
+	return this->sockets.bind_and_listen(port, num_listen);
+}
+
+void Postman::disconnect(int fd)
+{
+	ScopedLock lock(this->soc_mutex);
+	this->sockets.disconnect(fd);
+}
+
+ScopedConnection::ScopedConnection(Postman &postman, int ip, int port) : fd(postman.connect_remote(ip, port)), postman(postman) {}
+
+ScopedConnection::ScopedConnection(Postman &postman, const char *hostname, int port) : fd(postman.connect_remote(hostname, port)), postman(postman) {}
+
+ScopedConnection::~ScopedConnection()
+{
+	postman.disconnect(fd); // fd can be -1; Sockets ignore bad fds
+}
+
+int ScopedConnection::get_fd() const
+{
+	return fd;
 }

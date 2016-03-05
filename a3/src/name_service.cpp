@@ -16,10 +16,24 @@
 static NameService::LogEntry pop_entry(std::stringstream &ss);
 static void push(std::stringstream &ss, const NameService::LogEntry &entry);
 
-int NameService::suggest(TCP::Sockets &sockets, const Function &func, unsigned &ret)
+NameService::NameService()
+{
+	int retval = pthread_mutex_init(&this->mutex, NULL);
+	assert(retval == 0);
+}
+
+NameService::~NameService()
+{
+	pthread_mutex_destroy(&this->mutex);
+}
+
+int NameService::suggest_helper(Postman &postman, const Function &func, unsigned &ret)
 {
 	NameIdsWithPivot &pair = this->func_to_ids[func];
 	NameIds &ids = pair.first;
+#ifndef NDEBUG
+	print_function(func);
+#endif
 
 	if(ids.size() == 0)
 	{
@@ -39,38 +53,46 @@ int NameService::suggest(TCP::Sockets &sockets, const Function &func, unsigned &
 	int id = *it;
 
 	// if a function is registered under an id, the id must have existed...
-	if(this->resolve(id, name) < 0)
+	if(this->resolve_helper(id, name) < 0)
 	{
 		// this happens when the name entry is cleaned up by other suggest() call for a different function, which cleaned up zombie name entries
 		// remove this candadate
 		ids.erase(id);
 		// recurse with one less candidate
-		return suggest(sockets, func, ret);
+		return suggest_helper(postman, func, ret);
 	}
 
-	// bingo! this server is still alive
-	TCP::ScopedConnection conn(sockets, name.ip, name.port);
-
-	if(conn.get_fd() != -1)
 	{
+		ScopedConnection conn(postman, name.ip, name.port);
+
+		if(conn.get_fd() != -1)
+		{
 #ifndef NDEBUG
-		std::cout << "suggestion for func:" << func.name << " to id:" << id << std::endl;
+			std::cout << "suggestion for func:" << func.name << " to id:" << id << std::endl;
 #endif
-		// bingo! this server is still alive
-		ret = id;
-		return 0;
+			// bingo! this server is still alive
+			ret = id;
+			return 0;
+		}
 	}
 
 	// this server is not alive
-	this->kill(id);
+	this->kill_helper(id);
 	ids.erase(id);
 	// recurse with one less candidate
-	return suggest(sockets, func, ret);
+	return this->suggest_helper(postman, func, ret);
 }
 
-NameService::Names NameService::get_all_names() const
+int NameService::suggest(Postman &postman, const Function &func, unsigned &ret)
+{
+	ScopedLock lock(this->mutex);
+	return this->suggest_helper(postman, func, ret);
+}
+
+NameService::Names NameService::get_all_names()
 {
 	Names names;
+	ScopedLock lock(this->mutex);
 	LeftMap::const_iterator it = this->name_to_id.begin();
 
 	for(; it != this->name_to_id.end(); it++)
@@ -83,12 +105,17 @@ NameService::Names NameService::get_all_names() const
 
 void NameService::register_fn(unsigned id, const Function &func)
 {
+	ScopedLock lock(this->mutex);
+	this->register_fn_helper(id, func);
+}
+
+void NameService::register_fn_helper(unsigned id, const Function &func)
+{
 #ifndef NDEBUG
 	std::cout << "registering function for node id:" << id << std::endl;
 #endif
 	// insert the entry
-	Function signiture = func.to_signiture();
-	NameIds &ids = this->func_to_ids[signiture].first;
+	NameIds &ids = this->func_to_ids[func].first;
 	ids.insert(id);
 	// add a log entry
 	std::stringstream ss;
@@ -129,7 +156,13 @@ Function func_from_sstream(std::stringstream &ss)
 	return func;
 }
 
-int NameService::resolve(unsigned id, Name &ret) const
+int NameService::resolve(unsigned id, Name &ret)
+{
+	ScopedLock lock(this->mutex);
+	return this->resolve_helper(id, ret);
+}
+
+int NameService::resolve_helper(unsigned id, Name &ret) const
 {
 	RightMap::const_iterator it = this->id_to_name.find(id);
 
@@ -142,7 +175,13 @@ int NameService::resolve(unsigned id, Name &ret) const
 	return 0;
 }
 
-int NameService::resolve(const Name &name, unsigned &ret) const
+int NameService::resolve(const Name &name, unsigned &ret)
+{
+	ScopedLock lock(this->mutex);
+	return this->resolve_helper(name, ret);
+}
+
+int NameService::resolve_helper(const Name &name, unsigned &ret) const
 {
 	LeftMap::const_iterator it = this->name_to_id.find(name);
 
@@ -156,6 +195,12 @@ int NameService::resolve(const Name &name, unsigned &ret) const
 }
 
 void NameService::register_name(unsigned id, const Name &name)
+{
+	ScopedLock lock(this->mutex);
+	this->register_name_helper(id, name);
+}
+
+void NameService::register_name_helper(unsigned id, const Name &name)
 {
 #ifndef NDEBUG
 	std::cout << "Registering name id:" << id << ' ' << to_format(name) << std::endl;
@@ -173,21 +218,22 @@ void NameService::register_name(unsigned id, const Name &name)
 	this->logs.push_back(log);
 }
 
-void NameService::remove_name(unsigned id)
+void NameService::kill(unsigned id)
 {
-	RightMap::iterator it = this->id_to_name.find(id);
-	// this is an internal method which is called to remove an EXISTING name
-	assert(it != this->id_to_name.end());
-	this->name_to_id.erase(it->second);
-	this->id_to_name.erase(id);
+	ScopedLock lock(this->mutex);
+	this->kill_helper(id);
 }
 
-void NameService::kill(unsigned id)
+void NameService::kill_helper(unsigned id)
 {
 #ifndef NDEBUG
 	std::cout << "killing node:" << id << std::endl;
 #endif
-	this->remove_name(id);
+	// remove entry from the bi-directional map
+	RightMap::iterator it = this->id_to_name.find(id);
+	assert(it != this->id_to_name.end());
+	this->name_to_id.erase(it->second);
+	this->id_to_name.erase(id);
 	// add a log entry
 	std::stringstream buf;
 	push_i32(buf, id);
@@ -248,7 +294,13 @@ Function to_function(const char *name_cstr, int *argTypes)
 	return func;
 }
 
-unsigned NameService::get_version() const
+unsigned NameService::get_version()
+{
+	ScopedLock lock(this->mutex);
+	return this->get_version_helper();
+}
+
+unsigned NameService::get_version_helper() const
 {
 	return this->logs.size();
 }
@@ -266,7 +318,13 @@ bool is_arg_output(int arg_type)
 size_t get_arg_car(int arg_type)
 {
 	// truncate to lower 16 bits
-	return static_cast<unsigned short>(arg_type);
+	unsigned short low = static_cast<unsigned short>(arg_type);
+		return std::max(static_cast<unsigned short>(1), low);
+}
+
+bool is_arg_scalar(int arg_type)
+{
+	return static_cast<unsigned short>(arg_type) == 0;
 }
 
 int get_arg_data_type(int arg_type)
@@ -275,12 +333,13 @@ int get_arg_data_type(int arg_type)
 	return (arg_type >> 16) & 0xff;
 }
 
-std::string NameService::get_logs(unsigned since) const
+std::string NameService::get_logs(unsigned since)
 {
 	std::stringstream ss;
-	unsigned num_delta = (this->get_version() <= since)
+	ScopedLock lock(this->mutex);
+	unsigned num_delta = (this->get_version_helper() <= since)
 	                     ? 0
-	                     : this->get_version() - since;
+	                     : this->get_version_helper() - since;
 #ifndef NDEBUG
 	std::cout << "sending log (num_delta:" << num_delta << ")" << std::endl;
 #endif
@@ -299,6 +358,7 @@ std::string NameService::get_logs(unsigned since) const
 
 int NameService::apply_logs(std::stringstream &ss)
 {
+	ScopedLock lock(this->mutex);
 	unsigned num_delta = pop_i32(ss);
 	LogEntries entries;
 #ifndef NDEBUG
@@ -309,17 +369,17 @@ int NameService::apply_logs(std::stringstream &ss)
 	{
 		unsigned log_version = pop_i32(ss);
 #ifndef NDEBUG
-		std::cout << "\tgot log - their version:" << log_version << ", my version:" << get_version() << std::endl;
+		std::cout << "\tgot log - their version:" << log_version << ", my version:" << get_version_helper() << std::endl;
 #endif
 		LogEntry entry = pop_entry(ss);
 		std::stringstream entry_ss(entry.details);
 
-		if(log_version <= get_version())
+		if(log_version <= get_version_helper())
 		{
 			continue;
 		}
 
-		assert(log_version == get_version() + 1);
+		assert(log_version == get_version_helper() + 1);
 
 		switch(entry.type)
 		{
@@ -329,14 +389,14 @@ int NameService::apply_logs(std::stringstream &ss)
 				Name name;
 				name.ip = pop_i32(entry_ss);
 				name.port = pop_i32(entry_ss);
-				this->register_name(id, name);
+				this->register_name_helper(id, name);
 			}
 			break;
 
 			case KILL_NODE:
 			{
 				unsigned id = pop_i32(entry_ss);
-				this->kill(id);
+				this->kill_helper(id);
 			}
 			break;
 
@@ -344,7 +404,7 @@ int NameService::apply_logs(std::stringstream &ss)
 			{
 				unsigned id = pop_i32(entry_ss);
 				Function func = func_from_sstream(entry_ss);
-				this->register_fn(id, func);
+				this->register_fn_helper(id, func);
 			}
 			break;
 		}

@@ -20,30 +20,6 @@ void print_host_info(int fd, const char *prefix)
 	          << prefix << "_PORT " << port << std::endl;
 }
 
-int connect_to_binder(TCP::Sockets &sockets)
-{
-	char *hostname = getenv("BINDER_ADDRESS");
-
-	if(hostname == NULL)
-	{
-		// this should not happen in the student environment
-		assert(false);
-		return -1;
-	}
-
-	char *port_chars = getenv("BINDER_PORT");
-
-	if(hostname == NULL)
-	{
-		// this should not happen in the student environment
-		assert(false);
-		return -1;
-	}
-
-	int port = atoi(port_chars);
-	return sockets.connect_remote(hostname, port);
-}
-
 void get_hostname(int fd, std::string &hostname, int &port)
 {
 	// get port number
@@ -98,6 +74,7 @@ int pop_i32(std::stringstream &ss)
 
 char pop_i8(std::stringstream &ss)
 {
+	assert(sizeof(char) == 1);
 	return ss.get();
 }
 
@@ -142,77 +119,80 @@ bool Timer::is_timeout() const
 
 void push_i8(std::stringstream &ss, char val)
 {
-	ss.write(&val, 1);
+	assert(sizeof(char) == 1);
+	ss.put(val);
 }
 
 void push_i16(std::stringstream &ss, short val)
 {
+	assert(sizeof(short) == 2);
 	val = htons(val);
-	ss.write((char*)&val, 2);
+	ss.write((char*)&val, sizeof(short));
 }
 
 void push_i64(std::stringstream &ss, long val)
 {
+	assert(sizeof(long) == 8);
 	int num = 0x01;
-	char *data = (char*)&num;
-	char buf[8];
+	char *test = (char*)&num;
 
-	if(*data == 0x01) // test the first byte
+	if(*test == 0x01) // test the first byte
 	{
 		// little endian -- convert to big endian
-		buf[0] = data[7];
-		buf[1] = data[6];
-		buf[2] = data[5];
-		buf[3] = data[4];
-		buf[4] = data[3];
-		buf[5] = data[2];
-		buf[6] = data[1];
-		buf[7] = data[0];
-		ss.write(buf, 8);
+		push_i8(ss, val >> 56);
+		push_i8(ss, val >> 48);
+		push_i8(ss, val >> 40);
+		push_i8(ss, val >> 32);
+		push_i8(ss, val >> 24);
+		push_i8(ss, val >> 16);
+		push_i8(ss, val >> 8);
+		push_i8(ss, val);
 	}
 	else
 	{
-		ss.write((char*)&val, 8);
+		ss.write((char*)&val, sizeof(long));
 	}
 }
 
 void push_f32(std::stringstream &ss, float val)
 {
 	//TODO hope that it works...
-	ss.write((char*)&val, 4);
+	assert(sizeof(float) == 4);
+	ss.write((char*)&val, sizeof(float));
 }
 
 void push_f64(std::stringstream &ss, double val)
 {
 	//TODO hope that it works...
-	ss.write((char*)&val, 8);
+	assert(sizeof(double) == 8);
+	ss.write((char*)&val, sizeof(double));
 }
 
 long pop_i64(std::stringstream &ss)
 {
+	assert(sizeof(long) == 8);
 	int num = 0x01;
-	char *data = (char*)&num;
-	char buf[8];
+	char *test = (char*)&num;
 	long ret;
-	char *ret_casted = (char*)&ret;
-	ss.read((char*)&ret, 8);
+	char *casted = (char*)&ret;
+	char buf[sizeof(long)];
+	ss.read(buf, sizeof(long));
 
-	if(*data == 0x01) // test the first byte
+	if(*test == 0x01) // test the first byte
 	{
-		// little endian -- convert to big endian
-		buf[0] = ret_casted[7];
-		buf[1] = ret_casted[6];
-		buf[2] = ret_casted[5];
-		buf[3] = ret_casted[4];
-		buf[4] = ret_casted[3];
-		buf[5] = ret_casted[2];
-		buf[6] = ret_casted[1];
-		buf[7] = ret_casted[0];
-
-		for(int i = 0; i < 8; i++)
-		{
-			ret_casted[i] = buf[i];
-		}
+		// little endian -- convert back to little endian
+		casted[0] = buf[7];
+		casted[1] = buf[6];
+		casted[2] = buf[5];
+		casted[3] = buf[4];
+		casted[4] = buf[3];
+		casted[5] = buf[2];
+		casted[6] = buf[1];
+		casted[7] = buf[0];
+	}
+	else
+	{
+		ss.read((char*)&ret, sizeof(long));
 	}
 
 	return ret;
@@ -222,22 +202,34 @@ short pop_i16(std::stringstream &ss)
 {
 	// assumes ss contains the valid bytes
 	short ret;
-	ss.read((char*)&ret, 2);
+	assert(sizeof(short) == 2);
+	ss.read((char*)&ret, sizeof(short));
 	return ntohs(ret);
 }
 
 float pop_f32(std::stringstream &ss)
 {
-	// assumes ss contains the valid bytes
 	float ret;
-	ss.read((char*)&ret, 4);
-	return ntohs(ret);
+	assert(sizeof(float) == 4);
+	ss.read((char*)&ret, sizeof(float));
+	return ret;
 }
 
 double pop_f64(std::stringstream &ss)
 {
 	// assumes ss contains the valid bytes
 	double ret;
-	ss.read((char*)&ret, 8);
-	return ntohs(ret);
+	assert(sizeof(double) == 8);
+	ss.read((char*)&ret, sizeof(double));
+	return ret;
+}
+
+ScopedLock::ScopedLock(pthread_mutex_t &mutex) : mutex(mutex)
+{
+	pthread_mutex_lock(&mutex);
+}
+
+ScopedLock::~ScopedLock()
+{
+	pthread_mutex_unlock(&mutex);
 }

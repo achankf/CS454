@@ -6,9 +6,11 @@
 #include <map>
 #include <queue>
 #include <string>
+#include <pthread.h>
 
 struct Function;
 class NameService;
+class ScopedConnection;
 
 class Postman : public TCP::Sockets::DataBuffer
 {
@@ -50,12 +52,13 @@ public: // typedefs
 	typedef std::map<int, std::queue<Message> > OutgoingRequests;
 	typedef std::map<int, Message> AssembleBuffer;
 private: // data
+	TCP::Sockets sockets;
 	IncomingRequests incoming;
 	OutgoingRequests outgoing;
-	AssembleBuffer asmBuf;
+	AssembleBuffer asm_buf;
+	pthread_mutex_t incoming_mutex, outgoing_mutex, asm_buf_mutex, soc_mutex;
 
 public: // refernces
-	TCP::Sockets &sockets;
 	NameService &ns;
 
 private: // helper methods
@@ -66,7 +69,14 @@ private: // helper methods
 	int receive_any(Request &ret);
 
 public: // methods
-	Postman(TCP::Sockets &sockets, NameService &ns);
+	Postman(NameService &ns);
+	~Postman();
+
+	// forward to Sockets
+	int bind_and_listen(int port = 0, int num_listen = 100);
+	int connect_remote(const char *hostname, int port);
+	int connect_remote(int ip, int port);
+	void disconnect(int fd);
 
 	// send requests
 	int send_confirm_terminate(int remote_fd, bool is_terminate = true);
@@ -88,11 +98,26 @@ public: // methods
 	// this is a blockying (busy-wait) method
 	int sync_and_receive_any(Request &ret, int timeout = DEFAULT_TIMEOUT);
 
-	int sync();
-
 	// defined by TCP::Sockets::DataBuffer
 	virtual void read_avail(int fd, const std::string &got);
 	virtual const std::string write_avail(int fd);
+
+	friend class ScopedConnection;
+};
+
+// since there are many instances where calls can fail,
+// this class takes advantage of RAII to auto disconnect
+// when the connect is out of scope
+class ScopedConnection
+{
+public: // data
+	int fd;
+	Postman &postman;
+public: // helper methods
+	ScopedConnection(Postman &postman, int ip, int port);
+	ScopedConnection(Postman &postman, const char *hostname, int port);
+	~ScopedConnection();
+	int get_fd() const;
 };
 
 #endif

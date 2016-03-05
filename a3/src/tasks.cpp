@@ -15,6 +15,7 @@ Tasks::Task::Task(Postman &postman, int remote_fd, const Name &remote_name, cons
 	  remote_name(remote_name),
 	  func(func),
 	  skel(skel),
+	  data(data),
 	  remote_ns_version(remote_ns_version) {}
 
 void Tasks::Task::run()
@@ -25,103 +26,112 @@ void Tasks::Task::run()
 #endif
 	void **args = new void*[func.types.size()];
 	int *arg_types = new int[func.types.size() + 1];
+	arg_types[func.types.size()] = 0;
 	std::stringstream ss(this->data);
+	std::vector<void*> malloced;
 
 	// allocate space and collect input into args
 	for(size_t i = 0; i < func.types.size(); i++)
 	{
 		int arg_type = arg_types[i] = func.types[i];
 		bool is_input = is_arg_input(arg_type);
-		size_t cardinality = std::max(static_cast<size_t>(1), get_arg_car(arg_type));
+		size_t cardinality = get_arg_car(arg_type);
+
+#ifndef NDEBUG
+		std::cout << "car:" << cardinality << " is_input:" << is_input << std::endl;
+#endif
 
 		switch(get_arg_data_type(arg_type))
 		{
 			case ARG_CHAR:
 				args[i] = malloc(cardinality * sizeof(char));
+			malloced.push_back(args[i]);
 
-				if(is_input)
+				for(size_t j = 0; j < cardinality; j++)
 				{
-					for(size_t j = 0; j < cardinality; j++)
-					{
-						((char*)args[i])[j] = pop_i8(ss);
-					}
+					char &argsij = ((char*)args[i])[j];
+					argsij = is_input ? pop_i8(ss) : 0;
+					std::cout << "\t>>>>>>>>>>>>>>>> val:" << (unsigned)(argsij &0xff) << std::endl;
 				}
 
 				break;
 
 			case ARG_SHORT:
 				args[i] = malloc(cardinality * sizeof(short));
+			malloced.push_back(args[i]);
 
-				if(is_input)
+				for(size_t j = 0; j < cardinality; j++)
 				{
-					for(size_t j = 0; j < cardinality; j++)
-					{
-						((short*)args[i])[j] = pop_i16(ss);
-					}
+					short &argsij = ((short*)args[i])[j];
+					argsij = is_input ? pop_i16(ss) : 0;
+					std::cout << "\t>>>>>>>>>>>>>>>> val:" << argsij << std::endl;
 				}
 
 				break;
 
 			case ARG_INT:
 				args[i] = malloc(cardinality * sizeof(int));
+			malloced.push_back(args[i]);
 
-				if(is_input)
+				for(size_t j = 0; j < cardinality; j++)
 				{
-					for(size_t j = 0; j < cardinality; j++)
-					{
-						((int*)args[i])[j] = pop_i32(ss);
-					}
+					int &argsij = ((int*)args[i])[j];
+					argsij = is_input ? pop_i32(ss) : 0;
+					std::cout << "\t>>>>>>>>>>>>>>>> val:" << argsij << std::endl;
 				}
 
 				break;
 
 			case ARG_LONG:
 				args[i] = malloc(cardinality * sizeof(long));
+			malloced.push_back(args[i]);
 
-				if(is_input)
+				for(size_t j = 0; j < cardinality; j++)
 				{
-					for(size_t j = 0; j < cardinality; j++)
-					{ ((long*)args[i])[j] = pop_i64(ss); }
+					long &argsij = ((long*)args[i])[j];
+					argsij = is_input ? pop_i64(ss) : 0;
+					std::cout << "\t>>>>>>>>>>>>>>>> val:" << argsij << std::endl;
 				}
 
 				break;
 
 			case ARG_DOUBLE:
 				args[i] = malloc(cardinality * sizeof(double));
+			malloced.push_back(args[i]);
 
-				if(is_input)
+				for(size_t j = 0; j < cardinality; j++)
 				{
-					for(size_t j = 0; j < cardinality; j++)
-					{
-						((double*)args[i])[j] = pop_f64(ss);
-					}
+					double &argsij = ((double*)args[i])[j];
+					argsij = is_input ? pop_f64(ss) : 0;
+					std::cout << "\t>>>>>>>>>>>>>>>> val:" << argsij << std::endl;
 				}
 
 				break;
 
 			case ARG_FLOAT:
 				args[i] = malloc(cardinality * sizeof(float));
+			malloced.push_back(args[i]);
 
-				if(is_input)
+				for(size_t j = 0; j < cardinality; j++)
 				{
-					for(size_t j = 0; j < cardinality; j++)
-					{
-						((float*)args[i])[j] = pop_f32(ss);
-					}
+					float &argsij = ((float*)args[i])[j];
+					argsij = is_input ? pop_f32(ss) : 0;
+					std::cout << "\t>>>>>>>>>>>>>>>> val:" << argsij << std::endl;
 				}
 
 				break;
 		}
 	}
 
-	arg_types[func.types.size()] = 0;
 	bool success = skel(arg_types, args) >= 0;
+	delete []arg_types;
 	postman.reply_execute(remote_fd, success, func, args, remote_ns_version);
 
 	// clean up memory before sending reply
 	for(size_t i = 0; i < func.types.size(); i++)
 	{
-		free(args[i]);
+		free(malloced.back());
+		malloced.pop_back();
 	}
 
 	delete []args;
@@ -177,19 +187,19 @@ void Tasks::terminate()
 
 void Tasks::push(Task &t)
 {
-	pthread_mutex_lock(&this->task_lock);
+	{
+	ScopedLock lock(this->task_lock);
 	this->tasks.push(t);
-	pthread_mutex_unlock(&this->task_lock);
+	}
 	sem_post(&this->task_sem);
 }
 
 Tasks::Task Tasks::pop()
 {
 	assert(!this->tasks.empty());
-	pthread_mutex_lock(&this->task_lock);
+	ScopedLock lock(this->task_lock);
 	Task t = this->tasks.front();
 	this->tasks.pop();
-	pthread_mutex_unlock(&this->task_lock);
 	return t;
 }
 
