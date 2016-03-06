@@ -9,9 +9,7 @@
 #include <iostream>
 #include <sstream>
 
-// ============== id generator ==============
-
-static unsigned next_u32()
+static unsigned next_u32() // responsible for generating unique ids; note: binder is NOT multi-threaded
 {
 	static unsigned i = 0;
 	return i++;
@@ -30,10 +28,11 @@ void terminate_servers(Postman &postman)
 		ScopedConnection conn(postman, it->ip, it->port);
 		int fd = conn.get_fd();
 
-		if(fd < 0) {
+		if(fd < 0)
+		{
 			// remote already dead
 #ifndef NDEBUG
-		std::cout << "remote already dead" << std::endl;
+			std::cout << "remote already dead" << std::endl;
 #endif
 			continue;
 		}
@@ -41,7 +40,7 @@ void terminate_servers(Postman &postman)
 		if(postman.send_terminate(fd) < 0)
 		{
 #ifndef NDEBUG
-		std::cout << "cannot send terminate for " << to_format(*it) << std::endl;
+			std::cout << "cannot send terminate for " << to_format(*it) << std::endl;
 #endif
 			// ???? maybe the server is busy? assume it's dead
 			continue;
@@ -50,7 +49,7 @@ void terminate_servers(Postman &postman)
 		Postman::Request req;
 
 		// timeout or the remote node has disconnected
-		while (postman.sync_and_receive_any(req, &fd) < 0
+		while(postman.sync_and_receive_any(req, &fd) < 0
 		        && (req.fd == fd && req.message.msg_type != Postman::CONFIRM_TERMINATE));
 
 #ifndef NDEBUG
@@ -132,12 +131,13 @@ int handle_request(Postman &postman, Postman::Request &req)
 
 					if(ns.resolve(n, remote_id) >= 0)
 					{
-						// remote it... though not really needed to do so
+						// remove it ... though not really needed to do so
 						ns.kill(remote_id);
 					}
 
 					continue;
 				} // otherwise connection has been established
+
 				postman.send_new_server_execute(remote_fd);
 			}
 		}

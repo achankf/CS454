@@ -116,9 +116,9 @@ void Tasks::Task::run()
 		}
 	}
 
-	bool success = skel(arg_types, args) >= 0;
+	int retval_got = skel(arg_types, args);
 	delete []arg_types;
-	postman.reply_execute(remote_fd, success, func, args, remote_ns_version);
+	postman.reply_execute(remote_fd, retval_got, func, args, remote_ns_version);
 
 	// clean up memory before sending reply
 	for(size_t i = 0; i < func.types.size(); i++)

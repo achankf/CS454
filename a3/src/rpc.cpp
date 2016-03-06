@@ -41,9 +41,6 @@ public: //public
 	const char *binder_hostname;
 	int binder_port;
 
-	// client cache
-	unsigned random_offset;
-
 public: //methods
 	Global()
 		: postman(ns),
@@ -55,8 +52,6 @@ public: //methods
 	{
 		// this constructor should not throw exception
 		assert(binder_hostname != NULL);
-		srand(time(NULL));
-		this->random_offset = rand();
 	}
 
 	// set and retreive skeletons for servers (only)
@@ -84,7 +79,7 @@ int rpcInit()
 	{
 		// should not happen in the student environment
 		assert(false);
-		return -1;
+		return g.server_fd;
 	}
 
 	int server_port;
@@ -100,23 +95,26 @@ int rpcInit()
 	{
 		// cannot connect to the binder
 		assert(false);
-		return -1;
+		return BINDER_UNAVAILABLE;
 	}
 
-	if(g.postman.send_iam_server(binder_fd, server_port) < 0)
+	int retval = g.postman.send_iam_server(binder_fd, server_port);
+
+	if(retval < 0)
 	{
 		// should not happen...
 		assert(false);
-		return -1;
+		return retval;
 	}
 
 	Postman::Request req;
+	retval = g.wait_for_desired(Postman::SERVER_OK, req, &binder_fd);
 
-	if(g.wait_for_desired(Postman::SERVER_OK, req, &binder_fd) < 0)
+	if(retval < 0)
 	{
 		// timeout
 		assert(false);
-		return -1;
+		return retval;
 	}
 
 	std::stringstream ss(req.message.str);
@@ -124,32 +122,36 @@ int rpcInit()
 	g.ns.apply_logs(ss);
 	// resolve "my" own name for future uses
 	g.ns.resolve(g.server_id, g.server_name);
-	return 0;
+	return OK;
 }
 
 int Global::rpc_call_helper(Name &server_name, Function &func, void **args)
 {
 	ScopedConnection target_conn(g.postman, server_name.ip, server_name.port);
 	int target_fd = target_conn.get_fd();
+	int retval;
 
 	if(target_fd < 0)
 	{
 		// this can happen when the server (immediately) after the binder replies
 		assert(false);
-		return -1;
+		return CANNOT_CONNECT_TO_SERVER;
 	}
 
-	if(g.postman.send_execute(target_fd, func, args) < 0)
+	retval = g.postman.send_execute(target_fd, func, args);
+
+	if(retval < 0)
 	{
 		// couldn't send? maybe server disconnected after connection established
-		return -1;
+		return retval;
 	}
 
 	Postman::Request req;
+	retval = g.wait_for_desired(Postman::EXECUTE_REPLY, req, &target_fd);
 
-	if(g.wait_for_desired(Postman::EXECUTE_REPLY, req, &target_fd) < 0)
+	if(retval < 0)
 	{
-		return -1;
+		return retval;
 	}
 
 	unsigned remote_ns_version = req.message.ns_version;
@@ -162,16 +164,17 @@ int Global::rpc_call_helper(Name &server_name, Function &func, void **args)
 		std::cout << "server has newer logs (their:" << remote_ns_version << ", mine:" << g.ns.get_version() << "), ask for updates" << std::endl;
 #endif
 		g.postman.send_ns_update(target_fd);
-
 		Postman::Request req;
-		if (wait_for_desired(Postman::NS_UPDATE_SENT, req, &target_fd) >= 0){
+
+		if(wait_for_desired(Postman::NS_UPDATE_SENT, req, &target_fd) >= 0)
+		{
 			std::stringstream ss(req.message.str);
 			g.ns.apply_logs(ss);
 		}
 	}
 
 	std::stringstream ss(req.message.str);
-	bool success = pop_i8(ss);
+	int retval_got = pop_i32(ss);
 
 	for(size_t i = 0; i < func.types.size(); i++)
 	{
@@ -238,7 +241,7 @@ int Global::rpc_call_helper(Name &server_name, Function &func, void **args)
 		}
 	}
 
-	return success ? 0 : -1;
+	return retval_got;
 }
 
 int rpcCall(char* name, int* argTypes, void** args)
@@ -246,8 +249,16 @@ int rpcCall(char* name, int* argTypes, void** args)
 #ifndef NDEBUG
 	std::cout << "RPC CALL" << std::endl;
 #endif
+	int retval;
 	Postman::Request req;
 	Function func = to_function(name, argTypes);
+
+	// sanity check
+	if(func.name.empty())
+	{
+		return FUNCTION_NAME_IS_EMPTY;
+	}
+
 	// send a location request to the binder
 	{
 		ScopedConnection conn(g.postman, g.binder_hostname, g.binder_port);
@@ -257,19 +268,23 @@ int rpcCall(char* name, int* argTypes, void** args)
 		{
 			// cannot connect to the binder -- should not happen
 			assert(false);
-			return -1;
+			return BINDER_UNAVAILABLE;
 		}
 
-		if(g.postman.send_loc_request(binder_fd, func) < 0)
+		retval = g.postman.send_loc_request(binder_fd, func);
+
+		if(retval < 0)
 		{
 			// didn't send successfully
-			return -1;
+			return retval;
 		}
 
-		if(g.wait_for_desired(Postman::LOC_REPLY, req, &binder_fd) < 0)
+		retval = g.wait_for_desired(Postman::LOC_REPLY, req, &binder_fd);
+
+		if(retval < 0)
 		{
 			// timeout
-			return -1;
+			return retval;
 		}
 	}
 	std::stringstream ss(req.message.str);
@@ -280,31 +295,19 @@ int rpcCall(char* name, int* argTypes, void** args)
 	{
 		unsigned target_id = pop_i32(ss);
 		Name name;
+		retval = g.ns.resolve(target_id, name);
 
-		if(g.ns.resolve(target_id, name) < 0)
+		if(retval < 0)
 		{
 			// cannot happen -- the database is synced with the binder
 			assert(false);
-			return -1;
+			return retval;
 		}
 
 		return g.rpc_call_helper(name, func, args);
 	}
 
-	switch(static_cast<Postman::ErrorNo>(pop_i32(ss)))
-	{
-		case Postman::NO_AVAILABLE_SERVER:
-			// do/print something?
-#ifndef NDEBUG
-			std::cout << "no available server" << std::endl;
-#endif
-			return -1;
-
-		default:
-			// not supposed to happen
-			assert(false);
-			return -1;
-	}
+	return pop_i32(ss);
 }
 
 int rpcCacheCall(char* name, int* argTypes, void** args)
@@ -314,19 +317,27 @@ int rpcCacheCall(char* name, int* argTypes, void** args)
 #endif
 	unsigned server_id;
 	Function func = to_function(name, argTypes);
+
+	// sanity check
+	if(func.name.empty())
+	{
+		return FUNCTION_NAME_IS_EMPTY;
+	}
+
 	std::set<unsigned> duplicates;
+	bool is_binder_unavail = false;
 
 	// repeat suggest() loop twice, call the binder once
 	for(int i = 0; i < 2; i++)
 	{
-		while(g.ns.suggest(g.postman, func, server_id, false, g.random_offset) >= 0)
+		while(g.ns.suggest(g.postman, func, server_id, false) >= 0)
 		{
 			Name server_name;
 
 			if(duplicates.find(server_id) != duplicates.end())
 			{
 				// already ran in a cycle
-				return -1;
+				return NO_AVAILABLE_SERVER;
 			}
 
 			duplicates.insert(server_id);
@@ -343,19 +354,23 @@ int rpcCacheCall(char* name, int* argTypes, void** args)
 		// already called the binder once, and no more suggestion available, so quit
 		if(i == 1)
 		{
-			return -1;
+			return is_binder_unavail ? BINDER_UNAVAILABLE : NO_AVAILABLE_SERVER;
 		}
 
 		// everything failed, try one last time with the binder
-		if(rpcCall(name, argTypes, args) == 0)
+		int retval = rpcCall(name, argTypes, args);
+
+		if(retval >= 0)
 		{
-			return 0;
+			return OK;
 		}
+
+		is_binder_unavail = retval == BINDER_UNAVAILABLE;
 	}
 
 	// unreachable
 	assert(false);
-	return -1;
+	return UNREACHABLE;
 }
 
 int rpcRegister(char* name, int* argTypes, skeleton f)
@@ -365,6 +380,20 @@ int rpcRegister(char* name, int* argTypes, skeleton f)
 #endif
 	// only the server calls this methods, and hello is sent during init()
 	Function func = to_function(name, argTypes);
+
+	// sanity check
+	if(f == NULL)
+	{
+		return SKELETON_IS_NULL;
+	}
+
+	// sanity check
+	if(func.name.empty())
+	{
+		return FUNCTION_NAME_IS_EMPTY;
+	}
+
+	int retval;
 	std::pair<Function, skeleton> not_used;
 	(void)not_used;
 
@@ -372,7 +401,7 @@ int rpcRegister(char* name, int* argTypes, skeleton f)
 	{
 		// found in local mapping -- which means the signiture is already registered; here we just need to update the skeleton locally
 		g.update_func_skel(func, f);
-		return 0;
+		return SKELETON_UPDATED;
 	}
 
 	ScopedConnection conn(g.postman, g.binder_hostname, g.binder_port);
@@ -382,23 +411,25 @@ int rpcRegister(char* name, int* argTypes, skeleton f)
 	{
 		// cannot connect to the binder
 		assert(false);
-		return -1;
+		return BINDER_UNAVAILABLE;
 	}
 
 	assert(g.server_id != -1); // must be registered
+	retval = g.postman.send_register(binder_fd, g.server_id, func);
 
-	if(g.postman.send_register(binder_fd, g.server_id, func) < 0)
+	if(retval < 0)
 	{
 		// cannot send the request
-		return -1;
+		return retval;
 	}
 
 	Postman::Request req;
+	retval = g.wait_for_desired(Postman::REGISTER_DONE, req, &binder_fd);
 
-	if(g.wait_for_desired(Postman::REGISTER_DONE, req, &binder_fd) < 0)
+	if(retval < 0)
 	{
 		// cannot get a reply...
-		return -1;
+		return retval;
 	}
 
 	// register the function skeleton locally
@@ -406,7 +437,7 @@ int rpcRegister(char* name, int* argTypes, skeleton f)
 	// reply contains nothing but log deltas
 	std::stringstream ss(req.message.str);
 	g.ns.apply_logs(ss);
-	return 0;
+	return OK;
 }
 
 int rpcExecute()
@@ -414,6 +445,7 @@ int rpcExecute()
 #ifndef NDEBUG
 	std::cout << "RPC EXECUTE" << std::endl;
 #endif
+	int retval;
 	{
 		ScopedConnection conn(g.postman, g.binder_hostname, g.binder_port);
 		int binder_fd = conn.get_fd();
@@ -421,6 +453,7 @@ int rpcExecute()
 
 		if(binder_fd >= 0)
 		{
+			// ignore error
 			g.postman.send_new_server_execute(binder_fd);
 		}
 	}
@@ -443,12 +476,13 @@ int rpcExecute()
 		std::stringstream ss(req.message.str);
 		Function func = func_from_sstream(ss);
 		std::pair<Function, skeleton> func_info;
+		retval = g.get_func_skel(func, func_info);
 
-		if(g.get_func_skel(func, func_info) < 0)
+		if(retval < 0)
 		{
 			// impossible -- client knows this function exists and server has the latest logs about its functions
 			assert(false);
-			return -1;
+			return retval;
 		}
 
 		// copy input
@@ -461,7 +495,7 @@ int rpcExecute()
 	// kill all threads
 	tasks.terminate();
 	// server terminates gracefully
-	return 0;
+	return OK;
 }
 
 int rpcTerminate()
@@ -475,7 +509,7 @@ int rpcTerminate()
 	if(binder_fd < 0)
 	{
 		// huh? trying to tell the binder to terminate, but couln't connect to the binder..>
-		return -1;
+		return BINDER_UNAVAILABLE;
 	}
 
 	return g.postman.send_terminate(binder_fd);
@@ -500,13 +534,13 @@ int Global::get_func_skel(const Function &func, std::pair<Function,skeleton> &re
 	if(it == this->function_map.end())
 	{
 		// can occur when registering a function for the first time
-		return -1;
+		return FUNCTION_NOT_REGISTERED;
 	}
 
 	std::set<Function>::iterator fit = this->real_signitures.find(sig);
 	assert(fit != this->real_signitures.end());
 	ret = std::make_pair(*fit, it->second);
-	return 0;
+	return OK;
 }
 
 int Global::wait_for_desired(int desired, Postman::Request &ret, int *need_alive_fd, int timeout)
@@ -518,13 +552,13 @@ int Global::wait_for_desired(int desired, Postman::Request &ret, int *need_alive
 		if(timer.is_timeout())
 		{
 			// timeout
-			return -1;
+			return TIMEOUT;
 		}
 
 		if(need_alive_fd != NULL && !postman.is_alive(*need_alive_fd))
 		{
 			// need-alive target has been disconnected, so error
-			return -1;
+			return REMOTE_DISCONNECTED;
 		}
 
 		if(postman.sync_and_receive_any(ret, need_alive_fd) < 0)
@@ -535,7 +569,7 @@ int Global::wait_for_desired(int desired, Postman::Request &ret, int *need_alive
 		// got the desired type(s) of request
 		if((ret.message.msg_type & desired) != 0)
 		{
-			return 0;
+			return OK;
 		}
 
 		int remote_fd = ret.fd;
@@ -562,21 +596,21 @@ int Global::wait_for_desired(int desired, Postman::Request &ret, int *need_alive
 				{
 					// cannot connect to the binder
 					assert(false);
-					return -1;
+					break;
 				}
 
 				if(postman.send_confirm_terminate(binder_fd) < 0)
 				{
 					// cannot ask IS_TERMINATE to the binder...
 					assert(false);
-					return -1;
+					break;
 				}
 
 				if(wait_for_desired(Postman::CONFIRM_TERMINATE, ret, &binder_fd) < 0)
 				{
 					// timeout -- assume failure
 					assert(false);
-					return -1;
+					break;
 				}
 
 				this->is_terminate = pop_i8(ss);
@@ -593,8 +627,11 @@ int Global::wait_for_desired(int desired, Postman::Request &ret, int *need_alive
 				{
 					this->postman.send_ns_update(binder_fd);
 				}
+
 				Postman::Request req;
-				if (wait_for_desired(Postman::NS_UPDATE_SENT, req, &binder_fd, timeout) >= 0) {
+
+				if(wait_for_desired(Postman::NS_UPDATE_SENT, req, &binder_fd, timeout) >= 0)
+				{
 					std::stringstream ss(req.message.str);
 					this->ns.apply_logs(ss);
 				}
@@ -618,5 +655,5 @@ int Global::wait_for_desired(int desired, Postman::Request &ret, int *need_alive
 	}
 
 	// is terminate
-	return -1; // didn't get the desired request, but is terminating
+	return TERMINATING; // didn't get the desired request, but is terminating
 }

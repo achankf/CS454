@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 int f0_Skel(int *argTypes, void **args) {
 
@@ -47,5 +48,12 @@ int f4_Skel(int *argTypes, void **args) {
 
 int f4_Skel_overload1(int *argTypes, void **args) {
 	puts("f4_skel overload 1 called");
+  return 0; // just want to make sure this method ran
+}
+
+int fvoid (int *argTypes, void **args) {
+	puts("sleeping");
+	sleep(1);
+	puts("awake");
   return 0; // just want to make sure this method ran
 }

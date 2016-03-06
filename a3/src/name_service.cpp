@@ -28,7 +28,7 @@ NameService::~NameService()
 	pthread_mutex_destroy(&this->mutex);
 }
 
-int NameService::suggest_helper(Postman &postman, const Function &func, unsigned &ret, bool is_binder, unsigned random_offset)
+int NameService::suggest_helper(Postman &postman, const Function &func, unsigned &ret, bool is_binder)
 {
 	NameIdsWithPivot &pair = this->func_to_ids[func];
 	NameIds &ids = pair.first;
@@ -39,11 +39,11 @@ int NameService::suggest_helper(Postman &postman, const Function &func, unsigned
 	if(ids.size() == 0)
 	{
 		// no suggestion
-		return -1;
+		return NO_AVAILABLE_SERVER;
 	}
 
 	// update the pivot
-	pair.second = (pair.second + random_offset + 1) % ids.size();
+	pair.second = (pair.second + 1) % ids.size();
 	// get the k-th element (pivot)
 	NameIds::iterator it = ids.begin();
 	std::advance(it, pair.second);
@@ -60,7 +60,7 @@ int NameService::suggest_helper(Postman &postman, const Function &func, unsigned
 		// remove this candadate
 		ids.erase(id);
 		// recurse with one less candidate
-		return suggest_helper(postman, func, ret, random_offset);
+		return suggest_helper(postman, func, ret, is_binder);
 	}
 
 	{
@@ -73,7 +73,7 @@ int NameService::suggest_helper(Postman &postman, const Function &func, unsigned
 #endif
 			// bingo! this server is still alive
 			ret = id;
-			return 0;
+			return OK;
 		}
 	}
 
@@ -87,13 +87,13 @@ int NameService::suggest_helper(Postman &postman, const Function &func, unsigned
 
 	ids.erase(id);
 	// recurse with one less candidate
-	return this->suggest_helper(postman, func, ret, random_offset);
+	return this->suggest_helper(postman, func, ret, is_binder);
 }
 
-int NameService::suggest(Postman &postman, const Function &func, unsigned &ret, bool is_binder, unsigned random_offset)
+int NameService::suggest(Postman &postman, const Function &func, unsigned &ret, bool is_binder)
 {
 	ScopedLock lock(this->mutex);
-	return this->suggest_helper(postman, func, ret, is_binder, random_offset);
+	return this->suggest_helper(postman, func, ret, is_binder);
 }
 
 NameService::Names NameService::get_all_names()
@@ -176,11 +176,11 @@ int NameService::resolve_helper(unsigned id, Name &ret) const
 
 	if(it == this->id_to_name.end())
 	{
-		return -1;
+		return NOT_IN_NAME_SERVICE;
 	}
 
 	ret = it->second;
-	return 0;
+	return OK;
 }
 
 int NameService::resolve(const Name &name, unsigned &ret)
@@ -195,11 +195,11 @@ int NameService::resolve_helper(const Name &name, unsigned &ret) const
 
 	if(it == this->name_to_id.end())
 	{
-		return -1;
+		return NOT_IN_NAME_SERVICE;
 	}
 
 	ret = it->second;
-	return 0;
+	return OK;
 }
 
 void NameService::register_name(unsigned id, const Name &name)
@@ -421,7 +421,7 @@ int NameService::apply_logs(std::stringstream &ss)
 #ifndef NDEBUG
 	std::cout << "finished apply logs, current version:" << get_version_helper() << std::endl;
 #endif
-	return 0;
+	return OK;
 }
 
 static void push(std::stringstream &ss, const NameService::LogEntry &entry)

@@ -49,7 +49,7 @@ int TCP::Sockets::bind_and_listen(int port, int num_listen)
 	{
 		// this should not happen in the student environment
 		assert(false);
-		return -1;
+		return BAD_FD;
 	}
 
 	struct sockaddr_in socket_info;
@@ -65,7 +65,7 @@ int TCP::Sockets::bind_and_listen(int port, int num_listen)
 		// this should not happen in the student environment
 		assert(false);
 		close(temp_fd);
-		return -1;
+		return CANNOT_BIND_PORT;
 	}
 
 	if(listen(temp_fd, num_listen) < 0)
@@ -73,7 +73,7 @@ int TCP::Sockets::bind_and_listen(int port, int num_listen)
 		// this should not happen in the student environment
 		assert(false);
 		close(temp_fd);
-		return -1;
+		return CANNOT_LISTEN_PORT;
 	}
 
 	this->local_fd = temp_fd;
@@ -105,7 +105,7 @@ int TCP::Sockets::sync()
 {
 	if(num_connected() == 0)
 	{
-		return 0;
+		return OK;
 	}
 
 	fd_set readfds, writefds;
@@ -145,7 +145,7 @@ int TCP::Sockets::sync()
 				{
 					// this should not happen in the student environment
 					assert(false);
-					return -1;
+					return CANNOT_ACCEPT_CONNECTION;
 				}
 
 				bool inserted = this->connected_fds.insert(remote_fd).second;
@@ -191,7 +191,7 @@ int TCP::Sockets::sync()
 		}
 	}
 
-	return 0;
+	return OK;
 }
 
 int TCP::Sockets::flush(int dst_fd)
@@ -204,7 +204,7 @@ int TCP::Sockets::flush(int dst_fd)
 	{
 		// no buffer set -- coding error
 		assert(false);
-		return 0;
+		return OK;
 	}
 
 	const std::string msg = this->buffer->write_avail(dst_fd);
@@ -212,7 +212,7 @@ int TCP::Sockets::flush(int dst_fd)
 	if(msg.empty())
 	{
 		// have nothing to send
-		return -1;
+		return NOTHING_TO_SEND;
 	}
 
 	char *buf = new char[msg.size()];
@@ -222,12 +222,12 @@ int TCP::Sockets::flush(int dst_fd)
 
 	if(num_written == msg.size())
 	{
-		return 0;
+		return OK;
 	}
 
 	// for example, running valgrind can slow the server significantly and this can happen
 	// though, this probably won't happen for the assignment, so I'll ignore error handling
-	return -1;
+	return CANNOT_WRITE_TO_SOCKET;
 }
 
 int TCP::Sockets::get_max_fd() const
@@ -243,7 +243,7 @@ int TCP::Sockets::get_max_fd() const
 
 	// this should not happen
 	assert(false);
-	return -1;
+	return UNREACHABLE;
 }
 
 int TCP::Sockets::connect_remote(const char *hostname, int port)
@@ -257,7 +257,7 @@ int TCP::Sockets::connect_remote(const char *hostname, int port)
 	{
 		// should not happen in the student environment
 		assert(false);
-		return -1;
+		return CANNOT_RESOLVE_HOSTNAME;
 	}
 
 	memcpy(&ip, server_entity->h_addr, server_entity->h_length);
@@ -275,13 +275,13 @@ int TCP::Sockets::connect_remote(int ip, int port)
 	if(temp_fd < 0)
 	{
 		assert(false);
-		return -1;
+		return BAD_FD;
 	}
 
 	if(connect(temp_fd, (struct sockaddr *)&remote_info, sizeof(remote_info)) < 0)
 	{
 		close(temp_fd);
-		return -1;
+		return CANNOT_START_CONNECTION;
 	}
 
 	// connect to remote machine (server) successfully)

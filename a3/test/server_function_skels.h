@@ -10,3 +10,4 @@ int f2_Skel(int* a, void** b);
 int f3_Skel(int* a, void** b);
 int f4_Skel(int* a, void** b);
 int f4_Skel_overload1(int* a, void** b);
+int fvoid(int* a, void** b);

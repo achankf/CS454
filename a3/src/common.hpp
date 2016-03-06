@@ -6,7 +6,34 @@
 #include <sstream>
 #include <string>
 
+// This file provides utility classes/methods.
+
 struct Name;
+
+enum ErrorNo
+{
+	SKELETON_UPDATED            =    1,
+	OK                          =    0,
+	BAD_FD                      =   -1,
+	BINDER_UNAVAILABLE          =   -2,
+	CANNOT_ACCEPT_CONNECTION    =   -3,
+	CANNOT_BIND_PORT            =   -4,
+	CANNOT_CONNECT_TO_SERVER    =   -5,
+	CANNOT_LISTEN_PORT          =   -6,
+	CANNOT_RESOLVE_HOSTNAME     =   -7,
+	CANNOT_START_CONNECTION     =   -8,
+	CANNOT_WRITE_TO_SOCKET      =   -9,
+	FUNCTION_NAME_IS_EMPTY      =  -10,
+	FUNCTION_NOT_REGISTERED     =  -11,
+	NOTHING_TO_SEND             =  -12,
+	NOT_IN_NAME_SERVICE         =  -13,
+	NO_AVAILABLE_SERVER         =  -14,
+	REMOTE_DISCONNECTED         =  -15,
+	SKELETON_IS_NULL            =  -16,
+	TERMINATING                 =  -17,
+	TIMEOUT                     =  -18,
+	UNREACHABLE                 = -100
+};
 
 class Timer
 {

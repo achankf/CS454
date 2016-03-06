@@ -49,13 +49,13 @@ int get_peer_info(int fd, Name &ret)
 	{
 		// should not happen in the student environment?
 		assert(false);
-		return -1;
+		return CANNOT_RESOLVE_HOSTNAME;
 	}
 
 	// assign name
 	ret.ip = sin.sin_addr.s_addr; // DON'T CONVERT THIS INTO HOST ORDER
 	ret.port = ntohs(sin.sin_port);
-	return 0;
+	return OK;
 }
 
 void push_i32(std::stringstream &ss, int val)

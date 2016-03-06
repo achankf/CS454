@@ -60,12 +60,13 @@ private: // functions
 	// unsynchronized version of the public methods
 	int flush_helper(int dst_fd);
 
+	size_t num_connected(int *exclude_fd = NULL) const;
+
 public:
 	Sockets();
 	~Sockets();
 
 	bool is_alive(int fd) const;
-	size_t num_connected(int *exclude_fd = NULL) const;
 	void disconnect(int fd);
 
 	// this is important -- if the buffer is not set, every incoming messages will be discarded

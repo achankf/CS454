@@ -150,10 +150,10 @@ int Postman::send_execute(int server_fd, const Function &func, void **args)
 	return this->send(server_fd, msg);
 }
 
-int Postman::reply_execute(int remote_fd, bool success, const Function &func, void **args, unsigned remote_ns_version)
+int Postman::reply_execute(int remote_fd, int retval_got, const Function &func, void **args, unsigned remote_ns_version)
 {
 	std::stringstream ss;
-	push_i8(ss, success);
+	push_i32(ss, retval_got);
 
 	// extract output
 	for(size_t i = 0; i < func.types.size(); i++)
@@ -259,6 +259,7 @@ int Postman::reply_register(int remote_fd, unsigned remote_ns_version)
 int Postman::sync_and_receive_any(Request &ret, int *need_alive_fd, int timeout)
 {
 	Timer timer(timeout);
+
 	// busy-wait until "good to see you" reply is back
 	while(this->receive_any(ret) < 0)
 	{
@@ -267,7 +268,7 @@ int Postman::sync_and_receive_any(Request &ret, int *need_alive_fd, int timeout)
 		if(need_alive_fd != NULL && !this->sockets.is_alive(*need_alive_fd))
 		{
 			// need-alive target has been disconnected, so error
-			return -1;
+			return REMOTE_DISCONNECTED;
 		}
 
 		if(this->sockets.sync() < 0)
@@ -277,13 +278,14 @@ int Postman::sync_and_receive_any(Request &ret, int *need_alive_fd, int timeout)
 			assert(false);
 		}
 
-		if (timer.is_timeout()){
+		if(timer.is_timeout())
+		{
 			std::cout << "timeout" << std::endl;
-			return -1;
+			return TIMEOUT;
 		}
 	}
 
-	return 0;
+	return OK;
 }
 
 int Postman::send_loc_request(int binder_fd, const Function &func)
@@ -394,13 +396,13 @@ int Postman::receive_any(Request &ret)
 
 	if(this->incoming.empty())
 	{
-		return -1;
+		return -1; // internal use only
 	}
 
 	// copy and remove
 	ret = this->incoming.front();
 	this->incoming.pop();
-	return 0;
+	return OK;
 }
 
 const std::string Postman::write_avail(int fd)
@@ -469,12 +471,6 @@ size_t Postman::is_alive(int fd)
 {
 	ScopedLock lock(this->soc_mutex);
 	return this->sockets.is_alive(fd);
-}
-
-size_t Postman::num_connected(int *exclude_fd)
-{
-	ScopedLock lock(this->soc_mutex);
-	return this->sockets.num_connected(exclude_fd);
 }
 
 int Postman::send_new_server_execute(int binder_fd)

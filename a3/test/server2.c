@@ -18,7 +18,7 @@ int main(int argc, char *argv[]) {
   rpcRegister("fvoid", argTypes0, NULL);
   rpcRegister("fvoid", argTypes0, NULL);
   rpcRegister("fvoid", argTypes0, NULL);
-  rpcRegister("fvoid", argTypes0, *f4_Skel_overload1);
+  rpcRegister("fvoid", argTypes0, *fvoid);
 
   /* call rpcExecute */
   rpcExecute();

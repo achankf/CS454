@@ -10,16 +10,14 @@
 
 struct Function;
 class NameService;
-class ScopedConnection;
 
+/*
+	This class is responsible for sending and receiving messages from the sockets.
+	All public methods are synchronous. Note: each buffer has its own mutex.
+*/
 class Postman : public TCP::Sockets::DataBuffer
 {
 public: // typedefs
-	enum ErrorNo
-	{
-		NO_AVAILABLE_SERVER
-	};
-
 	// these are flags
 	enum MessageType
 	{
@@ -76,7 +74,6 @@ public: // methods
 	// forward to Sockets
 	int bind_and_listen(int port = 0, int num_listen = 100);
 	size_t is_alive(int fd);
-	size_t num_connected(int *exclude_fd = NULL);
 	int connect_remote(const char *hostname, int port);
 	int connect_remote(int ip, int port);
 	void disconnect(int fd);
@@ -92,7 +89,7 @@ public: // methods
 	int send_terminate(int remote_fd);
 
 	// send replies
-	int reply_execute(int remote_fd, bool success, const Function &func, void **args, unsigned remote_ns_version);
+	int reply_execute(int remote_fd, int retval_got, const Function &func, void **args, unsigned remote_ns_version);
 	int reply_loc_request(int remote_fd, const Function &func, unsigned remote_ns_version);
 	int reply_ns_update(int remote_fd, unsigned remote_ns_version);
 	int reply_register(int remote_fd, unsigned remote_ns_version);
@@ -105,8 +102,6 @@ public: // methods
 	// defined by TCP::Sockets::DataBuffer
 	virtual void read_avail(int fd, const std::string &got);
 	virtual const std::string write_avail(int fd);
-
-	friend class ScopedConnection;
 };
 
 // since there are many instances where calls can fail,
