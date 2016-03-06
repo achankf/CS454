@@ -10,8 +10,9 @@
 
 /*
 	this buffer should be large enough to prevent segfaults
-	notice that StringChannel assumes all 4 bytes for the string size
-	to be read at once, so SOCKET_BUF_SIZE must be at least 5
+	notice that StringChannel assumes Message.ns_version, Message.size,
+	and Message.msg_type to be read at once, so SOCKET_BUF_SIZE
+	must be at least 12
 */
 #define SOCKET_BUF_SIZE 2048
 
@@ -63,6 +64,8 @@ public:
 	Sockets();
 	~Sockets();
 
+	bool is_alive(int fd) const;
+	size_t num_connected(int *exclude_fd = NULL) const;
 	void disconnect(int fd);
 
 	// this is important -- if the buffer is not set, every incoming messages will be discarded

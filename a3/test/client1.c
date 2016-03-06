@@ -5,6 +5,7 @@
  * which prepares the arguments, calls "rpcCall", and checks the returns.
  */
 
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -99,6 +100,21 @@ int main() {
   args4 = (void **)malloc(count4 * sizeof(void *));
   args4[0] = (void *)a4;
 
+  char *a4_o1 = "gggggggggggggggggggggggggggg";
+	int b4_o1 = 1234;
+  int count4_o1 = 2;
+  int argTypes4_o1[count4 + 1];
+  void **args4_o1;
+
+  argTypes4_o1[0] = (1 << ARG_INPUT) | (ARG_CHAR << 16) | 28;
+  argTypes4_o1[1] = (1 << ARG_INPUT) | (ARG_INT << 16);
+  argTypes4_o1[2] = 0;
+
+  args4_o1 = (void **)malloc(count4 * sizeof(void *));
+  args4_o1[0] = (void *)a4_o1;
+  args4_o1[1] = (void *)&b4_o1;
+
+
   /* rpcCalls */
   int s0 = rpcCall("f0", argTypes0, args0);
   /* test the return f0 */
@@ -112,6 +128,11 @@ int main() {
 
 
   int s1 = rpcCall("f1", argTypes1, args1);
+  s1 = rpcCall("f1", argTypes1, args1);
+  s1 = rpcCall("f1", argTypes1, args1);
+  s1 = rpcCall("f1", argTypes1, args1);
+  s1 = rpcCall("f1", argTypes1, args1);
+  s1 = rpcCall("f1", argTypes1, args1);
   /* test the return of f1 */
   printf("\nEXPECTED return of f1 is: %ld\n", a1 + b1 * c1 - d1);
   if (s1 >= 0) { 
@@ -157,6 +178,13 @@ int main() {
   printf("\nEXPECTED return of f4: some integer other than 0");
   printf("\nACTUAL return of f4: %d\n", s4);
 
+
+	/* test overloading */
+  assert(rpcCall("f4", argTypes4_o1, args4_o1) >= 0);
+  assert(rpcCall("f4", argTypes4, args4) == -1);
+  assert(rpcCall("f4", argTypes4_o1, args4_o1) >= 0);
+  assert(rpcCall("f4", argTypes4, args4) == -1);
+
   /* rpcTerminate */
   printf("\ndo you want to terminate? y/n: ");
   if (getchar() == 'y')
@@ -167,6 +195,7 @@ int main() {
 	free(args2);
 	free(args3);
 	free(args4);
+	free(args4_o1);
 	free(return2);
 
   /* end of client.c */

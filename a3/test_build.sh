@@ -1,7 +1,7 @@
 #!/bin/bash -xe
 
 SRC=src
-TEST=PartialTestCode
+TEST=test
 DFLAG=-ggdb
 WFLAG="-pedantic -Wextra -Wall"
 

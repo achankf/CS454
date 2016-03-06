@@ -45,7 +45,7 @@ public: // typedefs
 	typedef std::set<unsigned> NameIds;
 	typedef std::vector<Name> Names;
 	// the pivot (unsigned) is used for round-robin suggestions
-	typedef std::pair<NameIds, unsigned> NameIdsWithPivot;
+	typedef std::pair<NameIds, size_t> NameIdsWithPivot;
 
 	// the following should simulate bidirectional search
 	typedef std::map<Name,unsigned> LeftMap; // Name to id
@@ -64,7 +64,7 @@ private: // methods
 	// these are unsynchronized version of the public methods
 	int resolve_helper(const Name &name, unsigned &ret) const;
 	int resolve_helper(unsigned id, Name &ret) const;
-	int suggest_helper(Postman &postman, const Function &func, unsigned &ret);
+	int suggest_helper(Postman &postman, const Function &func, unsigned &ret, bool is_binder, unsigned random_offset = 0);
 	unsigned get_version_helper() const;
 	void kill_helper(unsigned id);
 	void register_fn_helper(unsigned id, const Function &func);
@@ -77,7 +77,7 @@ public: // methods
 	Names get_all_names();
 	int resolve(const Name &name, unsigned &ret);
 	int resolve(unsigned id, Name &ret);
-	int suggest(Postman &postman, const Function &func, unsigned &ret);
+	int suggest(Postman &postman, const Function &func, unsigned &ret, bool is_binder, unsigned random_offset = 0);
 	unsigned get_version();
 
 	// non-binder should update NameService using apply_logs

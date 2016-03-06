@@ -7,6 +7,7 @@
 #include <iostream>
 #include <netdb.h>
 #include <unistd.h>
+#include <sys/time.h>
 
 int TCP::Sockets::create_socket()
 {
@@ -25,10 +26,12 @@ TCP::Sockets::~Sockets()
 	{
 		int fd = *it;
 		assert(fd != -1);
-		if (fd != this->local_fd) {
-		// close connections
-		close(fd);
-	}
+
+		if(fd != this->local_fd)
+		{
+			// close connections
+			close(fd);
+		}
 	}
 
 	if(this->local_fd != -1)
@@ -100,12 +103,20 @@ void TCP::Sockets::setup_write_fds(fd_set &fds) const
 
 int TCP::Sockets::sync()
 {
+	if(num_connected() == 0)
+	{
+		return 0;
+	}
+
 	fd_set readfds, writefds;
 	setup_read_fds(readfds);
 	setup_write_fds(writefds);
 	int max_fd = this->get_max_fd();
 	char buf[SOCKET_BUF_SIZE];
-	int retval = select(max_fd + 1, &readfds, &writefds, NULL, NULL);
+	struct timeval time;
+	time.tv_sec = 1;
+	time.tv_usec = 0;
+	int retval = select(max_fd + 1, &readfds, &writefds, NULL, &time);
 
 	if(retval < 0 && errno != EINTR)
 	{
@@ -154,6 +165,7 @@ int TCP::Sockets::sync()
 				{
 					// remote sent EOF -- disconnect remote
 					this->disconnect(fd);
+					break; // iterators invalidated
 				}
 				else if(count > 0)
 				{
@@ -297,4 +309,20 @@ void TCP::Sockets::disconnect(int fd)
 void TCP::Sockets::set_buffer(DataBuffer *buffer)
 {
 	this->buffer = buffer;
+}
+
+bool TCP::Sockets::is_alive(int fd) const
+{
+	return this->connected_fds.find(fd) != this->connected_fds.end();
+}
+
+size_t TCP::Sockets::num_connected(int *exclude_fd) const
+{
+	if(exclude_fd != NULL && this->is_alive(*exclude_fd))
+	{
+		// target found, so exclude it in the count
+		return this->connected_fds.size() - 1;
+	}
+
+	return this->connected_fds.size();
 }

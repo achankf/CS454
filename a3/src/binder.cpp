@@ -20,35 +20,43 @@ static unsigned next_u32()
 void terminate_servers(Postman &postman)
 {
 	NameService::Names names = postman.ns.get_all_names();
-	NameService::Names::const_iterator it = names.begin();
+	NameService::Names::iterator it;
 
-	for(; it != names.end(); it++)
+	for(it = names.begin(); it != names.end(); it++)
 	{
+#ifndef NDEBUG
+		std::cout << "trying to terminate " << to_format(*it) << std::endl;
+#endif
 		ScopedConnection conn(postman, it->ip, it->port);
 		int fd = conn.get_fd();
 
+		if(fd < 0) {
+			// remote already dead
+#ifndef NDEBUG
+		std::cout << "remote already dead" << std::endl;
+#endif
+			continue;
+		}
+
 		if(postman.send_terminate(fd) < 0)
 		{
+#ifndef NDEBUG
+		std::cout << "cannot send terminate for " << to_format(*it) << std::endl;
+#endif
 			// ???? maybe the server is busy? assume it's dead
 			continue;
 		}
 
 		Postman::Request req;
-		Timer timer(1);
 
-		while(!timer.is_timeout())
-		{
-			if(postman.sync_and_receive_any(req) < 0
-			        || req.message.msg_type != Postman::CONFIRM_TERMINATE)
-			{
-				// timeout or drop requests (since we're terminating there's no need to process new requests)
-				continue;
-			}
+		// timeout or the remote node has disconnected
+		while (postman.sync_and_receive_any(req, &fd) < 0
+		        && (req.fd == fd && req.message.msg_type != Postman::CONFIRM_TERMINATE));
 
-			std::cout << "send terminate " << fd << std::endl;
-			postman.send_confirm_terminate(fd);
-			break;
-		}
+#ifndef NDEBUG
+		std::cout << "send terminate " << fd << std::endl;
+#endif
+		postman.send_confirm_terminate(fd);
 	}
 }
 
@@ -104,6 +112,34 @@ int handle_request(Postman &postman, Postman::Request &req)
 		{
 			Function func = func_from_sstream(ss);
 			return postman.reply_loc_request(remote_fd, func, remote_ns_version);
+		}
+
+		case Postman::NEW_SERVER_EXECUTE:
+		{
+			NameService::Names all_names = ns.get_all_names();
+			NameService::Names::iterator it;
+
+			for(it = all_names.begin(); it != all_names.end(); it++)
+			{
+				Name &n = *it;
+				ScopedConnection conn(postman, n.ip, n.port);
+				int remote_fd = conn.get_fd();
+
+				if(remote_fd < 0)
+				{
+					// remote server is dead
+					unsigned remote_id;
+
+					if(ns.resolve(n, remote_id) >= 0)
+					{
+						// remote it... though not really needed to do so
+						ns.kill(remote_id);
+					}
+
+					continue;
+				} // otherwise connection has been established
+				postman.send_new_server_execute(remote_fd);
+			}
 		}
 
 		case Postman::CONFIRM_TERMINATE:

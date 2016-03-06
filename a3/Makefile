@@ -1,5 +1,5 @@
 all:
-	make -C src DFLAG="-DNDEBUG" OFLAG="-Os" WFLAG="-pedantic -Wextra -Wall"
+	make -C src DFLAG="-DNDEBUG" WFLAG="-pedantic -Wextra -Wall"
 
 .phony: clean
 

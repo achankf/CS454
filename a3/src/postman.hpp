@@ -34,7 +34,8 @@ public: // typedefs
 		EXECUTE             = (1 <<  8),
 		EXECUTE_REPLY       = (1 <<  9),
 		CONFIRM_TERMINATE   = (1 << 10), // server ask this question to the binder
-		TERMINATE           = (1 << 11)
+		NEW_SERVER_EXECUTE  = (1 << 11),
+		TERMINATE           = (1 << 12)
 	};
 	struct Message
 	{
@@ -74,6 +75,8 @@ public: // methods
 
 	// forward to Sockets
 	int bind_and_listen(int port = 0, int num_listen = 100);
+	size_t is_alive(int fd);
+	size_t num_connected(int *exclude_fd = NULL);
 	int connect_remote(const char *hostname, int port);
 	int connect_remote(int ip, int port);
 	void disconnect(int fd);
@@ -83,6 +86,7 @@ public: // methods
 	int send_execute(int server_fd, const Function &func, void **args);
 	int send_iam_server(int binder_fd, int listen_port);
 	int send_loc_request(int binder_fd, const Function &func);
+	int send_new_server_execute(int binder_fd);
 	int send_ns_update(int remote_fd);
 	int send_register(int binder_fd, int my_id, const Function &func);
 	int send_terminate(int remote_fd);
@@ -96,7 +100,7 @@ public: // methods
 	int reply_update_ns(int remote_fd, unsigned remote_ns_version);
 
 	// this is a blockying (busy-wait) method
-	int sync_and_receive_any(Request &ret, int timeout = DEFAULT_TIMEOUT);
+	int sync_and_receive_any(Request &ret, int *need_alive_fd = NULL, int timeout = DEFAULT_TIMEOUT);
 
 	// defined by TCP::Sockets::DataBuffer
 	virtual void read_avail(int fd, const std::string &got);

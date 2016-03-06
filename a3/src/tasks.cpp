@@ -36,7 +36,6 @@ void Tasks::Task::run()
 		int arg_type = arg_types[i] = func.types[i];
 		bool is_input = is_arg_input(arg_type);
 		size_t cardinality = get_arg_car(arg_type);
-
 #ifndef NDEBUG
 		std::cout << "car:" << cardinality << " is_input:" << is_input << std::endl;
 #endif
@@ -45,78 +44,72 @@ void Tasks::Task::run()
 		{
 			case ARG_CHAR:
 				args[i] = malloc(cardinality * sizeof(char));
-			malloced.push_back(args[i]);
+				malloced.push_back(args[i]);
 
 				for(size_t j = 0; j < cardinality; j++)
 				{
 					char &argsij = ((char*)args[i])[j];
 					argsij = is_input ? pop_i8(ss) : 0;
-					std::cout << "\t>>>>>>>>>>>>>>>> val:" << (unsigned)(argsij &0xff) << std::endl;
 				}
 
 				break;
 
 			case ARG_SHORT:
 				args[i] = malloc(cardinality * sizeof(short));
-			malloced.push_back(args[i]);
+				malloced.push_back(args[i]);
 
 				for(size_t j = 0; j < cardinality; j++)
 				{
 					short &argsij = ((short*)args[i])[j];
 					argsij = is_input ? pop_i16(ss) : 0;
-					std::cout << "\t>>>>>>>>>>>>>>>> val:" << argsij << std::endl;
 				}
 
 				break;
 
 			case ARG_INT:
 				args[i] = malloc(cardinality * sizeof(int));
-			malloced.push_back(args[i]);
+				malloced.push_back(args[i]);
 
 				for(size_t j = 0; j < cardinality; j++)
 				{
 					int &argsij = ((int*)args[i])[j];
 					argsij = is_input ? pop_i32(ss) : 0;
-					std::cout << "\t>>>>>>>>>>>>>>>> val:" << argsij << std::endl;
 				}
 
 				break;
 
 			case ARG_LONG:
 				args[i] = malloc(cardinality * sizeof(long));
-			malloced.push_back(args[i]);
+				malloced.push_back(args[i]);
 
 				for(size_t j = 0; j < cardinality; j++)
 				{
 					long &argsij = ((long*)args[i])[j];
 					argsij = is_input ? pop_i64(ss) : 0;
-					std::cout << "\t>>>>>>>>>>>>>>>> val:" << argsij << std::endl;
 				}
 
 				break;
 
 			case ARG_DOUBLE:
 				args[i] = malloc(cardinality * sizeof(double));
-			malloced.push_back(args[i]);
+				malloced.push_back(args[i]);
 
 				for(size_t j = 0; j < cardinality; j++)
 				{
 					double &argsij = ((double*)args[i])[j];
 					argsij = is_input ? pop_f64(ss) : 0;
-					std::cout << "\t>>>>>>>>>>>>>>>> val:" << argsij << std::endl;
 				}
 
 				break;
 
 			case ARG_FLOAT:
 				args[i] = malloc(cardinality * sizeof(float));
-			malloced.push_back(args[i]);
+				malloced.push_back(args[i]);
 
 				for(size_t j = 0; j < cardinality; j++)
 				{
 					float &argsij = ((float*)args[i])[j];
 					argsij = is_input ? pop_f32(ss) : 0;
-					std::cout << "\t>>>>>>>>>>>>>>>> val:" << argsij << std::endl;
 				}
 
 				break;
@@ -188,8 +181,8 @@ void Tasks::terminate()
 void Tasks::push(Task &t)
 {
 	{
-	ScopedLock lock(this->task_lock);
-	this->tasks.push(t);
+		ScopedLock lock(this->task_lock);
+		this->tasks.push(t);
 	}
 	sem_post(&this->task_sem);
 }

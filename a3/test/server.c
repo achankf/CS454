@@ -1,5 +1,6 @@
 #include "rpc.h"
 #include "server_function_skels.h"
+#include <stdlib.h>
 
 int main(int argc, char *argv[]) {
   
@@ -12,11 +13,13 @@ int main(int argc, char *argv[]) {
   int count2 = 3;
   int count3 = 1;
   int count4 = 1;
+  int count4_overload1 = 2;
   int argTypes0[count0 + 1];
   int argTypes1[count1 + 1];
   int argTypes2[count2 + 1];
   int argTypes3[count3 + 1];
   int argTypes4[count4 + 1];
+  int argTypes4_overload1[count4_overload1 + 1];
 
   argTypes0[0] = (1 << ARG_OUTPUT) | (ARG_INT << 16);
   argTypes0[1] = (1 << ARG_INPUT) | (ARG_INT << 16);
@@ -49,14 +52,29 @@ int main(int argc, char *argv[]) {
   argTypes4[0] = (1 << ARG_INPUT) | (ARG_CHAR << 16) | 28;
   argTypes4[1] = 0;
 
+  argTypes4_overload1[0] = (1 << ARG_INPUT) | (ARG_CHAR << 16) | 28;
+  argTypes4_overload1[1] = (1 << ARG_INPUT) | (ARG_INT << 16);
+  argTypes4_overload1[2] = 0;
+
   /* 
    * register server functions f0~f4
    */
+  rpcRegister("f0", argTypes0, NULL);
+  rpcRegister("f0", argTypes0, NULL);
+  rpcRegister("f0", argTypes0, NULL);
+  rpcRegister("f0", argTypes0, NULL);
+  rpcRegister("f0", argTypes0, NULL);
+  rpcRegister("f0", argTypes0, NULL);
+  rpcRegister("f0", argTypes0, NULL);
+  rpcRegister("f0", argTypes0, NULL);
+  rpcRegister("f0", argTypes0, NULL);
+  rpcRegister("f0", argTypes0, NULL);
   rpcRegister("f0", argTypes0, *f0_Skel);
   rpcRegister("f1", argTypes1, *f1_Skel);
   rpcRegister("f2", argTypes2, *f2_Skel);
   rpcRegister("f3", argTypes3, *f3_Skel);
   rpcRegister("f4", argTypes4, *f4_Skel);
+  rpcRegister("f4", argTypes4_overload1, *f4_Skel_overload1);
 
   /* call rpcExecute */
   rpcExecute();

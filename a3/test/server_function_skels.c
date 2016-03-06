@@ -1,5 +1,6 @@
 #include "server_functions.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 int f0_Skel(int *argTypes, void **args) {
@@ -40,7 +41,11 @@ int f3_Skel(int *argTypes, void **args) {
  * server function execution, i.e. file not exist
  */
 int f4_Skel(int *argTypes, void **args) {
-
+	puts("f4_skel called");
   return -1; /* can not print the file */
 }
 
+int f4_Skel_overload1(int *argTypes, void **args) {
+	puts("f4_skel overload 1 called");
+  return 0; // just want to make sure this method ran
+}

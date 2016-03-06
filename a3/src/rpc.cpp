@@ -41,6 +41,9 @@ public: //public
 	const char *binder_hostname;
 	int binder_port;
 
+	// client cache
+	unsigned random_offset;
+
 public: //methods
 	Global()
 		: postman(ns),
@@ -52,6 +55,8 @@ public: //methods
 	{
 		// this constructor should not throw exception
 		assert(binder_hostname != NULL);
+		srand(time(NULL));
+		this->random_offset = rand();
 	}
 
 	// set and retreive skeletons for servers (only)
@@ -60,7 +65,7 @@ public: //methods
 
 	// wait for desired request (-1 means timeout; 0 means ok)
 	// desired contains flags of Postman::MessageType
-	int wait_for_desired(int desired, Postman::Request &ret, int timeout = DEFAULT_TIMEOUT);
+	int wait_for_desired(int desired, Postman::Request &ret, int *need_alive_fd = NULL, int timeout = DEFAULT_TIMEOUT);
 
 	// this is called after server_name is reserved (either by the binder or cache)
 	int rpc_call_helper(Name &server_name, Function &func, void **args);
@@ -107,14 +112,13 @@ int rpcInit()
 
 	Postman::Request req;
 
-	if(g.wait_for_desired(Postman::SERVER_OK, req) < 0)
+	if(g.wait_for_desired(Postman::SERVER_OK, req, &binder_fd) < 0)
 	{
 		// timeout
 		assert(false);
 		return -1;
 	}
 
-	std::cout << "C" << std::endl;
 	std::stringstream ss(req.message.str);
 	g.server_id = pop_i32(ss);
 	g.ns.apply_logs(ss);
@@ -143,15 +147,31 @@ int Global::rpc_call_helper(Name &server_name, Function &func, void **args)
 
 	Postman::Request req;
 
-	if(g.wait_for_desired(Postman::EXECUTE_REPLY, req) < 0)
+	if(g.wait_for_desired(Postman::EXECUTE_REPLY, req, &target_fd) < 0)
 	{
 		return -1;
 	}
 
+	unsigned remote_ns_version = req.message.ns_version;
+
+	if(remote_ns_version > g.ns.get_version())
+	{
+		// the server has more update-to-date logs, ask for it
+		// doesn't check for return value, let wait_for_desired() to handle it
+#ifndef NDEBUG
+		std::cout << "server has newer logs (their:" << remote_ns_version << ", mine:" << g.ns.get_version() << "), ask for updates" << std::endl;
+#endif
+		g.postman.send_ns_update(target_fd);
+
+		Postman::Request req;
+		if (wait_for_desired(Postman::NS_UPDATE_SENT, req, &target_fd) >= 0){
+			std::stringstream ss(req.message.str);
+			g.ns.apply_logs(ss);
+		}
+	}
+
 	std::stringstream ss(req.message.str);
 	bool success = pop_i8(ss);
-
-print_function(func);
 
 	for(size_t i = 0; i < func.types.size(); i++)
 	{
@@ -246,7 +266,7 @@ int rpcCall(char* name, int* argTypes, void** args)
 			return -1;
 		}
 
-		if(g.wait_for_desired(Postman::LOC_REPLY, req) < 0)
+		if(g.wait_for_desired(Postman::LOC_REPLY, req, &binder_fd) < 0)
 		{
 			// timeout
 			return -1;
@@ -268,13 +288,16 @@ int rpcCall(char* name, int* argTypes, void** args)
 			return -1;
 		}
 
-		return g.rpc_call_helper(name, func, args);;
+		return g.rpc_call_helper(name, func, args);
 	}
 
 	switch(static_cast<Postman::ErrorNo>(pop_i32(ss)))
 	{
 		case Postman::NO_AVAILABLE_SERVER:
 			// do/print something?
+#ifndef NDEBUG
+			std::cout << "no available server" << std::endl;
+#endif
 			return -1;
 
 		default:
@@ -286,19 +309,52 @@ int rpcCall(char* name, int* argTypes, void** args)
 
 int rpcCacheCall(char* name, int* argTypes, void** args)
 {
-	(void)args;
-	//TODO
-	assert(false);
-	ScopedConnection conn(g.postman, g.binder_hostname, g.binder_port);
-	int binder_fd = conn.get_fd();
+#ifndef NDEBUG
+	std::cout << "RPC cache call" << std::endl;
+#endif
+	unsigned server_id;
+	Function func = to_function(name, argTypes);
+	std::set<unsigned> duplicates;
 
-	if(binder_fd < 0)
+	// repeat suggest() loop twice, call the binder once
+	for(int i = 0; i < 2; i++)
 	{
-		// cannot connect to the binder -- should not happen
-		return -1;
+		while(g.ns.suggest(g.postman, func, server_id, false, g.random_offset) >= 0)
+		{
+			Name server_name;
+
+			if(duplicates.find(server_id) != duplicates.end())
+			{
+				// already ran in a cycle
+				return -1;
+			}
+
+			duplicates.insert(server_id);
+
+			if(g.ns.resolve(server_id, server_name) < 0)
+			{
+				// bad try
+				continue;
+			}
+
+			return g.rpc_call_helper(server_name, func, args);
+		}
+
+		// already called the binder once, and no more suggestion available, so quit
+		if(i == 1)
+		{
+			return -1;
+		}
+
+		// everything failed, try one last time with the binder
+		if(rpcCall(name, argTypes, args) == 0)
+		{
+			return 0;
+		}
 	}
 
-	Function func = to_function(name, argTypes);
+	// unreachable
+	assert(false);
 	return -1;
 }
 
@@ -309,6 +365,16 @@ int rpcRegister(char* name, int* argTypes, skeleton f)
 #endif
 	// only the server calls this methods, and hello is sent during init()
 	Function func = to_function(name, argTypes);
+	std::pair<Function, skeleton> not_used;
+	(void)not_used;
+
+	if(g.get_func_skel(func, not_used) >= 0)
+	{
+		// found in local mapping -- which means the signiture is already registered; here we just need to update the skeleton locally
+		g.update_func_skel(func, f);
+		return 0;
+	}
+
 	ScopedConnection conn(g.postman, g.binder_hostname, g.binder_port);
 	int binder_fd = conn.get_fd();
 
@@ -329,7 +395,7 @@ int rpcRegister(char* name, int* argTypes, skeleton f)
 
 	Postman::Request req;
 
-	if(g.wait_for_desired(Postman::REGISTER_DONE, req) < 0)
+	if(g.wait_for_desired(Postman::REGISTER_DONE, req, &binder_fd) < 0)
 	{
 		// cannot get a reply...
 		return -1;
@@ -348,6 +414,16 @@ int rpcExecute()
 #ifndef NDEBUG
 	std::cout << "RPC EXECUTE" << std::endl;
 #endif
+	{
+		ScopedConnection conn(g.postman, g.binder_hostname, g.binder_port);
+		int binder_fd = conn.get_fd();
+		assert(binder_fd != -1); // something must be very wrong if the binder is down
+
+		if(binder_fd >= 0)
+		{
+			g.postman.send_new_server_execute(binder_fd);
+		}
+	}
 	// used by the server to run tasks on a thread pool
 	Tasks tasks;
 
@@ -366,17 +442,6 @@ int rpcExecute()
 		unsigned remote_ns_version = req.message.ns_version;
 		std::stringstream ss(req.message.str);
 		Function func = func_from_sstream(ss);
-
-		if(remote_ns_version > g.ns.get_version())
-		{
-			// the client has more update-to-date logs, ask for it
-			// doesn't check for return value, let wait_for_desired() to handle it
-#ifndef NDEBUG
-			std::cout << "client has newer logs (their:" << remote_ns_version << ", mine:" << g.ns.get_version() << "), ask for updates" << std::endl;
-#endif
-			g.postman.send_ns_update(remote_fd);
-		}
-
 		std::pair<Function, skeleton> func_info;
 
 		if(g.get_func_skel(func, func_info) < 0)
@@ -434,8 +499,7 @@ int Global::get_func_skel(const Function &func, std::pair<Function,skeleton> &re
 
 	if(it == this->function_map.end())
 	{
-		// bug -- this means server doesn't know the functions it registered
-		assert(false);
+		// can occur when registering a function for the first time
 		return -1;
 	}
 
@@ -445,7 +509,7 @@ int Global::get_func_skel(const Function &func, std::pair<Function,skeleton> &re
 	return 0;
 }
 
-int Global::wait_for_desired(int desired, Postman::Request &ret, int timeout)
+int Global::wait_for_desired(int desired, Postman::Request &ret, int *need_alive_fd, int timeout)
 {
 	Timer timer(timeout); // double-timer
 
@@ -457,7 +521,13 @@ int Global::wait_for_desired(int desired, Postman::Request &ret, int timeout)
 			return -1;
 		}
 
-		if(postman.sync_and_receive_any(ret) < 0)
+		if(need_alive_fd != NULL && !postman.is_alive(*need_alive_fd))
+		{
+			// need-alive target has been disconnected, so error
+			return -1;
+		}
+
+		if(postman.sync_and_receive_any(ret, need_alive_fd) < 0)
 		{
 			continue;
 		}
@@ -502,7 +572,7 @@ int Global::wait_for_desired(int desired, Postman::Request &ret, int timeout)
 					return -1;
 				}
 
-				if(wait_for_desired(Postman::CONFIRM_TERMINATE, ret) < 0)
+				if(wait_for_desired(Postman::CONFIRM_TERMINATE, ret, &binder_fd) < 0)
 				{
 					// timeout -- assume failure
 					assert(false);
@@ -510,6 +580,25 @@ int Global::wait_for_desired(int desired, Postman::Request &ret, int timeout)
 				}
 
 				this->is_terminate = pop_i8(ss);
+				break;
+			}
+
+			case Postman::NEW_SERVER_EXECUTE:
+			{
+				ScopedConnection conn(postman, binder_hostname, binder_port);
+				int binder_fd = conn.get_fd();
+				assert(binder_fd != -1); // something is wrong...
+
+				if(binder_fd >= 0)
+				{
+					this->postman.send_ns_update(binder_fd);
+				}
+				Postman::Request req;
+				if (wait_for_desired(Postman::NS_UPDATE_SENT, req, &binder_fd, timeout) >= 0) {
+					std::stringstream ss(req.message.str);
+					this->ns.apply_logs(ss);
+				}
+
 				break;
 			}
 

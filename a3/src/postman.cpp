@@ -15,6 +15,7 @@ Postman::Postman(NameService &ns) :
 	ns(ns)
 {
 	int retval = pthread_mutex_init(&this->asm_buf_mutex, NULL);
+	(void) retval;
 	assert(retval == 0);
 	retval = pthread_mutex_init(&this->soc_mutex, NULL);
 	assert(retval == 0);
@@ -68,7 +69,6 @@ int Postman::send_execute(int server_fd, const Function &func, void **args)
 
 		// there is no point in differentiating b/w scalar and array of size 1
 		size_t cardinality = get_arg_car(arg_type);
-std::cout << "????????? i:" << i << " " << cardinality << std::endl;
 
 		switch(get_arg_data_type(arg_type))
 		{
@@ -256,30 +256,29 @@ int Postman::reply_register(int remote_fd, unsigned remote_ns_version)
 	return send(remote_fd, msg);
 }
 
-int Postman::sync_and_receive_any(Request &ret, int timeout)
+int Postman::sync_and_receive_any(Request &ret, int *need_alive_fd, int timeout)
 {
 	Timer timer(timeout);
-
 	// busy-wait until "good to see you" reply is back
 	while(this->receive_any(ret) < 0)
 	{
-		{
-			ScopedLock lock(this->soc_mutex);
+		ScopedLock lock(this->soc_mutex);
 
-			if(this->sockets.sync() < 0)
-			{
-				// some error occurred
-				//TODO ???
-				assert(false);
-			}
+		if(need_alive_fd != NULL && !this->sockets.is_alive(*need_alive_fd))
+		{
+			// need-alive target has been disconnected, so error
+			return -1;
 		}
 
-		if(timer.is_timeout())
+		if(this->sockets.sync() < 0)
 		{
-			// probably not likely going to happen
-#ifndef NDEBUG
+			// some error occurred
+			//TODO ???
+			assert(false);
+		}
+
+		if (timer.is_timeout()){
 			std::cout << "timeout" << std::endl;
-#endif
 			return -1;
 		}
 	}
@@ -325,8 +324,9 @@ int Postman::reply_loc_request(int remote_fd, const Function &func, unsigned rem
 	unsigned target_id;
 	std::stringstream ss;
 	Message msg;
+	bool is_binder = true; // this method can only be called by the binder
 
-	if(this->ns.suggest(*this, func, target_id) < 0)
+	if(this->ns.suggest(*this, func, target_id, is_binder) < 0)
 	{
 		push_i8(ss, false); // failure
 		ss << this->ns.get_logs(remote_ns_version);
@@ -351,7 +351,8 @@ void Postman::read_avail(int fd, const std::string &got)
 	ScopedLock lock(this->asm_buf_mutex);
 	Message &req_buf = this->asm_buf[fd];
 
-	if (got.empty()) {
+	if(got.empty())
+	{
 		assert(false);
 		return;
 	}
@@ -462,4 +463,22 @@ ScopedConnection::~ScopedConnection()
 int ScopedConnection::get_fd() const
 {
 	return fd;
+}
+
+size_t Postman::is_alive(int fd)
+{
+	ScopedLock lock(this->soc_mutex);
+	return this->sockets.is_alive(fd);
+}
+
+size_t Postman::num_connected(int *exclude_fd)
+{
+	ScopedLock lock(this->soc_mutex);
+	return this->sockets.num_connected(exclude_fd);
+}
+
+int Postman::send_new_server_execute(int binder_fd)
+{
+	Message msg = to_message(NEW_SERVER_EXECUTE, "");
+	return this->send(binder_fd, msg);
 }

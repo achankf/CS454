@@ -56,6 +56,10 @@ void debug_print_type(const Postman::Request &req)
 			temp = "Request: CONFIRM_TERMINATE";
 			break;
 
+		case Postman::NEW_SERVER_EXECUTE:
+			temp = "Request: NEW_SERVER_EXECUTE";
+			break;
+
 		case Postman::TERMINATE:
 			temp = "Request: TERMINATE";
 			break;
@@ -97,7 +101,7 @@ std::string format_arg(int arg_type)
 
 		default:
 			// unreachable
-			assert(false);
+			ss << "UNKNOWN?";
 			break;
 	}
 
@@ -129,6 +133,9 @@ void print_function(const Function &func)
 
 	for(size_t i = 0; i < func.types.size(); i++)
 	{
+		if(i > 10) { break; }
+
+		assert(func.types[i] != 0);
 		std::cout << '\t' << format_arg(func.types[i]) << std::endl;
 	}
 

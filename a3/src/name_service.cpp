@@ -19,6 +19,7 @@ static void push(std::stringstream &ss, const NameService::LogEntry &entry);
 NameService::NameService()
 {
 	int retval = pthread_mutex_init(&this->mutex, NULL);
+	(void) retval;
 	assert(retval == 0);
 }
 
@@ -27,7 +28,7 @@ NameService::~NameService()
 	pthread_mutex_destroy(&this->mutex);
 }
 
-int NameService::suggest_helper(Postman &postman, const Function &func, unsigned &ret)
+int NameService::suggest_helper(Postman &postman, const Function &func, unsigned &ret, bool is_binder, unsigned random_offset)
 {
 	NameIdsWithPivot &pair = this->func_to_ids[func];
 	NameIds &ids = pair.first;
@@ -42,7 +43,7 @@ int NameService::suggest_helper(Postman &postman, const Function &func, unsigned
 	}
 
 	// update the pivot
-	pair.second = (pair.second + 1) % ids.size();
+	pair.second = (pair.second + random_offset + 1) % ids.size();
 	// get the k-th element (pivot)
 	NameIds::iterator it = ids.begin();
 	std::advance(it, pair.second);
@@ -59,7 +60,7 @@ int NameService::suggest_helper(Postman &postman, const Function &func, unsigned
 		// remove this candadate
 		ids.erase(id);
 		// recurse with one less candidate
-		return suggest_helper(postman, func, ret);
+		return suggest_helper(postman, func, ret, random_offset);
 	}
 
 	{
@@ -76,17 +77,23 @@ int NameService::suggest_helper(Postman &postman, const Function &func, unsigned
 		}
 	}
 
-	// this server is not alive
-	this->kill_helper(id);
+	// only "kill" the id if application is the binder
+	// otherwise the logs become inconsistent
+	if(is_binder)
+	{
+		// this server is not alive
+		this->kill_helper(id);
+	}
+
 	ids.erase(id);
 	// recurse with one less candidate
-	return this->suggest_helper(postman, func, ret);
+	return this->suggest_helper(postman, func, ret, random_offset);
 }
 
-int NameService::suggest(Postman &postman, const Function &func, unsigned &ret)
+int NameService::suggest(Postman &postman, const Function &func, unsigned &ret, bool is_binder, unsigned random_offset)
 {
 	ScopedLock lock(this->mutex);
-	return this->suggest_helper(postman, func, ret);
+	return this->suggest_helper(postman, func, ret, is_binder, random_offset);
 }
 
 NameService::Names NameService::get_all_names()
@@ -112,7 +119,8 @@ void NameService::register_fn(unsigned id, const Function &func)
 void NameService::register_fn_helper(unsigned id, const Function &func)
 {
 #ifndef NDEBUG
-	std::cout << "registering function for node id:" << id << std::endl;
+	std::cout << "registering function for node id:" << id << " log#:" << (this->logs.size() + 1) << std::endl;
+	print_function(func);
 #endif
 	// insert the entry
 	NameIds &ids = this->func_to_ids[func].first;
@@ -203,7 +211,7 @@ void NameService::register_name(unsigned id, const Name &name)
 void NameService::register_name_helper(unsigned id, const Name &name)
 {
 #ifndef NDEBUG
-	std::cout << "Registering name id:" << id << ' ' << to_format(name) << std::endl;
+	std::cout << "Registering name id:" << id << ' ' << to_format(name) << " log#:" << (this->logs.size()+1) <<std::endl;
 #endif
 	// this is an internal method which is called to insert a NEW name
 	this->id_to_name.insert(std::make_pair(id, name));
@@ -227,7 +235,7 @@ void NameService::kill(unsigned id)
 void NameService::kill_helper(unsigned id)
 {
 #ifndef NDEBUG
-	std::cout << "killing node:" << id << std::endl;
+	std::cout << "killing node:" << id << " log#:" << (this->logs.size() + 1) << std::endl;
 #endif
 	// remove entry from the bi-directional map
 	RightMap::iterator it = this->id_to_name.find(id);
@@ -319,7 +327,7 @@ size_t get_arg_car(int arg_type)
 {
 	// truncate to lower 16 bits
 	unsigned short low = static_cast<unsigned short>(arg_type);
-		return std::max(static_cast<unsigned short>(1), low);
+	return std::max(static_cast<unsigned short>(1), low);
 }
 
 bool is_arg_scalar(int arg_type)
@@ -341,7 +349,7 @@ std::string NameService::get_logs(unsigned since)
 	                     ? 0
 	                     : this->get_version_helper() - since;
 #ifndef NDEBUG
-	std::cout << "sending log (num_delta:" << num_delta << ")" << std::endl;
+	std::cout << "sending log (num_delta:" << num_delta << ") since:" << since << " my version:" << get_version_helper() << std::endl;
 #endif
 	push_i32(ss, num_delta);
 
@@ -362,7 +370,7 @@ int NameService::apply_logs(std::stringstream &ss)
 	unsigned num_delta = pop_i32(ss);
 	LogEntries entries;
 #ifndef NDEBUG
-	std::cout << "applying " << num_delta << " logs:" << std::endl;
+	std::cout << "applying " << num_delta << " logs, current version:" << get_version_helper() << std::endl;
 #endif
 
 	for(size_t i = 0; i < num_delta; i++)
@@ -410,6 +418,9 @@ int NameService::apply_logs(std::stringstream &ss)
 		}
 	}
 
+#ifndef NDEBUG
+	std::cout << "finished apply logs, current version:" << get_version_helper() << std::endl;
+#endif
 	return 0;
 }
 
