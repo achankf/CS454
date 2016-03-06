@@ -4,10 +4,8 @@
 #include "postman.hpp"
 #include "rpc.h"
 #include "sockets.hpp"
-#include <algorithm>
 #include <cassert>
 #include <iostream>
-#include <sstream>
 
 static unsigned next_u32() // responsible for generating unique ids; note: binder is NOT multi-threaded
 {

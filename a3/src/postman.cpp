@@ -1,12 +1,8 @@
-#include "common.hpp"
 #include "debug.hpp"
 #include "name_service.hpp"
 #include "postman.hpp"
-#include "sockets.hpp"
-#include <algorithm> // copy
-#include <arpa/inet.h> // integer conversion
+#include "rpc.h"
 #include <cassert>
-#include <iostream>
 #include <sstream>
 
 static void push(std::stringstream &ss, Postman::Message &msg);
@@ -280,7 +276,6 @@ int Postman::sync_and_receive_any(Request &ret, int *need_alive_fd, int timeout)
 
 		if(timer.is_timeout())
 		{
-			std::cout << "timeout" << std::endl;
 			return TIMEOUT;
 		}
 	}

@@ -1,7 +1,6 @@
 #ifndef _name_service_hpp_
 #define _name_service_hpp_
 
-#include "rpc.h"
 #include <map>
 #include <set>
 #include <string>

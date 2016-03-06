@@ -7,7 +7,6 @@
 #include <pthread.h>
 #include <queue>
 #include <semaphore.h>
-#include <vector>
 
 class Postman;
 

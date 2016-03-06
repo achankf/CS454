@@ -1,11 +1,7 @@
-#include "common.hpp"
 #include "debug.hpp"
 #include "name_service.hpp"
-#include <algorithm>
-#include <arpa/inet.h> // network bytes order
+#include "rpc.h"
 #include <cassert>
-#include <exception>
-#include <iterator>
 
 #ifndef NDEBUG
 #include <iostream>

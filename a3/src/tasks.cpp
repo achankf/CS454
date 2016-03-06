@@ -1,10 +1,8 @@
-#include "common.hpp"
 #include "debug.hpp"
 #include "postman.hpp"
 #include "tasks.hpp"
 #include <cassert>
 #include <cstdlib> // malloc; need to avoid warning for deleting void*
-#include <exception>
 #include <iostream>
 
 void *run_thread(void *data);
