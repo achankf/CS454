@@ -1,0 +1,49 @@
+\section{Error Numbers}
+Well, when I did the assignment, I used assert statements to handle bugs and used a generic $-1$ as the error number.
+So, the following is an afterthought, and the names are as excessively descriptive as I can briefly discuss.
+The following enum is defined in {\tt common.hpp}.
+
+\begin{verbatim}
+SKELETON_UPDATED            =    1,
+OK                          =    0,
+BAD_FD                      =   -1,
+BINDER_UNAVAILABLE          =   -2,
+CANNOT_ACCEPT_CONNECTION    =   -3,
+CANNOT_BIND_PORT            =   -4,
+CANNOT_CONNECT_TO_SERVER    =   -5,
+CANNOT_LISTEN_PORT          =   -6,
+CANNOT_RESOLVE_HOSTNAME     =   -7,
+CANNOT_START_CONNECTION     =   -8,
+CANNOT_WRITE_TO_SOCKET      =   -9,
+FUNCTION_ARGS_ARE_INVALID   =  -10,
+FUNCTION_NAME_IS_INVALID    =  -11,
+FUNCTION_NOT_REGISTERED     =  -12,
+NOTHING_TO_SEND             =  -13,
+NOTHING_TO_RECEIVE          =  -14,
+NOT_A_CLIENT                =  -15,
+NOT_A_SERVER                =  -16,
+NOT_IN_NAME_SERVICE         =  -17,
+NO_AVAILABLE_SERVER         =  -18,
+REMOTE_DISCONNECTED         =  -19,
+SKELETON_IS_NULL            =  -20,
+TERMINATING                 =  -21,
+TIMEOUT                     =  -22,
+UNREACHABLE                 = -100
+\end{verbatim}
+
+Notice, though, if you get $-100$ as a return value, then it's a programming bug because unreachable codes were reached.
+
+In addition to internal errors, I also made some design decisions that may be conflicting with the specification.
+Namely, the following are considered errors
+\begin{itemize}
+\item
+Function whose name is null, or {\bf not} $0 < $ length $\le 64$.
+Notice valid names must have a length that is strictly greater than 0.
+\item
+{\tt argTypes} is {\tt NULL}.
+\item
+The client calls {\tt rpcRegister}, {\tt rpcExecute}.
+Though, the client can call {\tt rpcInit}, which becomes a server, and there is no going back.
+\item
+The server calls {\tt rpcCall}, {\tt rpcCacheCall}, and {\tt rpcTerminate}.
+\end{itemize}

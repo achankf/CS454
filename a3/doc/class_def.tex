@@ -12,6 +12,9 @@ Obviously, this structure is used as the key of {\tt std::map} in the name direc
 {\bf struct} {\tt Function}: similarly to {\bf struct} {\tt Name}, this is also used as a key in the name directory.
 This structure is composed of a function's name (in {\tt std::string}), and a list of argument types (in {\tt std::vector<int>}).
 Again, the comparison operator is almost free, with one catch: the equivalence of two function signitures disregard array cardinality (in that array of size 1 is the same as array of size 100), so to address this problem the comparison operator call {\tt Function::to\_signiture()} to create another copies of the signitures whose array size can only be 0 (scalar) or 1 (array).
+
+Notice that overloading the "$<$" operator for {\tt Function} effectively solves function overloading for the RPC system, since equivalence of argument types is the same as item-by-item comparison of {\tt std::vector<int>}, given that the argument types are inserted to the vector in the same order as in {\tt argTypes}.
+
 Of course, when the {\bf server} calls a skeleton it needs to know the actual cardinality of the array types, so this means that the server needs to to store the original function signiture along with the modified version.
 
 \item
@@ -60,6 +63,8 @@ a bidirectional mapping of {\tt Name} and {\tt int} ids.
 The mapping is simply based on two separate maps: {\tt std::map<Name,int>} and {\tt std::map<int,Name>}
 \item
 a mapping of {\tt Function} to pairs of {\tt std::set<int>} ids, and an integer pivot, where the pivot is used to suggest an id from the ids-set using Round-robin.
+Notice that {\bf each function has its own pivot}, which allows binder's suggestions to conform the specification.
+Also, the pivots are {\bf local} values that are {\bf not} sychronized along with the name directory, so the binder can have different pivots than the server and the clients, assuming the clients run {\tt rpcCacheCall}.
 \end{itemize}
 
 In additional to name resolving, {\tt NameService} has an internal log which can only affect by the binder.

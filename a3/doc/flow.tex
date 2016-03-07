@@ -1,0 +1,68 @@
+\section{Program Flow}
+I will try to describe the flow of the system.
+
+\subsection{Client}
+Ignoring {\tt rpcCacheCall}, the system goes as follows.
+\begin{itemize}
+\item
+The client initialize {\tt Global} variables.
+\item
+The client calls {\tt rpcCall}.
+\item
+{\tt rpcCall} ask the binder for a server suggestion
+\item
+If the binder finds a good suggestion, then reply the client with the server's id.
+Otherwise, send a failure.
+In either cases, the binder attaches partial logs of the name directory based on client's version in the request header.
+\item
+If the client doesn't get a valid suggestion, then end {\tt rpcCall}.
+Otherwise, the client send an execute request to the server.
+\item
+The server gets the request, run it, and then reply to the client.
+The server also send partial logs to the client, in case other servers join and caused this server is forced to update its name directory.
+\item
+The client applies to logs, get the result, and then end {\tt rpcCall}.
+\item
+It is possible that later the client calls for a terminate request to the binder.
+\end{itemize}
+
+\subsection{Server}
+Generally, the flow goes as follows.
+\begin{itemize}
+\item
+The server initialize {\tt Global} variables and call {\tt rpcInit} separately.
+\item
+During {\tt rpcInit}, the server sends a {\tt I\_AM\_SERVER} request to the binder and wait for its id in a {\tt SERVER\_OK} reply.
+\item
+Then the server register functions.
+\item
+Then the server run {\tt rpcExecute}.
+At this point, the server sends a {\tt NEW\_SERVER\_EXECUTE} to the binder, and the binder will broadcast this request to all servers, forcing them to send a {\tt ASK\_NS\_UPDATE}, which updates all servers' name directory.
+Notice that it is possible for the binder to catch some dead servers, which causes the binder to remove them from its name directory, effectively incrementing the versoin.
+Thus, it is a possibility that {\bf not every server will be synchronized to the same, latest version}.
+However, we will see in later sections that this is ok.
+\item
+Meanwhile, the server may get a terminate request from {\bf anyone}.
+Thus, it will ask the binder for confirmation through a {\tt CONFIRM\_TERMINATE} request.
+If the binder agrees the confirmation, then the server will call {\tt Tasks::terminate()}, which is a blocking call that {\bf may not necessarily return, if a thread is running a skeleton function that has an infinite loop} -- I assume that all skeleton functions will eventually halt.
+Once all tasks are ended, the server will exit gracefully.
+Note that the binder may terminate even before the server does so, assuming the server has long-running tasks that {\bf will eventually terminate}.
+\end{itemize}
+
+\subsection{The Binder}
+Unlikely clients/servers, the requests can arrive to the binder in any order, but the binder handles them in a gigantic switch statement in a sequential manner.
+In particular, the binder handles the following requests:
+\begin{itemize}
+\item
+{\tt I\_AM\_SERVER}
+\item
+{\tt REGISTER}
+\item
+{\tt LOC\_REQUEST}
+\item
+{\tt NEW\_SERVER\_EXECUTE}
+\item
+{\tt CONFIRM\_TERMINATE}
+\item
+{\tt ASK\_NS\_UPDATE}
+\end{itemize}
