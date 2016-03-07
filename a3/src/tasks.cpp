@@ -114,9 +114,10 @@ void Tasks::Task::run()
 		}
 	}
 
-	int retval_got = skel(arg_types, args);
+	int retval = skel(arg_types, args);
 	delete []arg_types;
-	postman.reply_execute(remote_fd, retval_got, func, args, remote_ns_version);
+	ErrorNo rpc_retval = retval < 0 ? SKELETON_FAILURE : OK;
+	postman.reply_execute(remote_fd, rpc_retval, func, args, remote_ns_version);
 
 	// clean up memory before sending reply
 	for(size_t i = 0; i < func.types.size(); i++)
@@ -128,7 +129,9 @@ void Tasks::Task::run()
 	delete []args;
 }
 
-Tasks::Tasks() : is_terminate(false)
+Tasks::Tasks() :
+	num_tasks_avail(0),
+	is_terminate(false)
 {
 	// not going to check for errors
 	int retval;
@@ -176,13 +179,21 @@ void Tasks::terminate()
 	}
 }
 
-void Tasks::push(Task &t)
+bool Tasks::push(Task &t, bool is_force_queue_task)
 {
 	{
 		ScopedLock lock(this->task_lock);
+
+		if(!is_force_queue_task && this->num_tasks_avail >= MAX_THREADS)
+		{
+			return false;
+		}
+
 		this->tasks.push(t);
+		this->num_tasks_avail++;
 	}
 	sem_post(&this->task_sem);
+	return true;
 }
 
 Tasks::Task Tasks::pop()
@@ -211,5 +222,12 @@ void *run_thread(void *data)
 		tasks.pop().run();
 	}
 
+	tasks.finished_a_task();
 	return NULL;
+}
+
+void Tasks::finished_a_task()
+{
+	ScopedLock lock(this->task_lock);
+	this->num_tasks_avail--;
 }

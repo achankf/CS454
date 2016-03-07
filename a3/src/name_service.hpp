@@ -7,8 +7,6 @@
 #include <vector>
 #include <pthread.h>
 
-#define MAX_FUNC_NAME_LEN 64
-
 struct Name
 {
 	int ip;

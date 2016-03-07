@@ -35,6 +35,7 @@ public: //public
 	// server (only set when the process is a server)
 	int server_fd;
 	int server_id;
+	bool has_run_execute;
 	bool is_terminate;
 	Name server_name;
 
@@ -47,6 +48,7 @@ public: //methods
 		: postman(ns),
 		  server_fd(-1),
 		  server_id(-1),
+		  has_run_execute(false),
 		  is_terminate(false),
 		  binder_hostname(getenv("BINDER_ADDRESS")),
 		  binder_port(strtol(getenv("BINDER_PORT"), NULL, 10))
@@ -58,13 +60,14 @@ public: //methods
 	// set and retreive skeletons for servers (only)
 	void update_func_skel(const Function &func, const skeleton &skel);
 	int get_func_skel(const Function &func, std::pair<Function,skeleton> &ret);
+	size_t num_func_registered() const;
 
 	// wait for desired request (-1 means timeout; 0 means ok)
 	// desired contains flags of Postman::MessageType
 	int wait_for_desired(int desired, Postman::Request &ret, int *need_alive_fd = NULL, int timeout = DEFAULT_TIMEOUT);
 
 	// this is called after server_name is reserved (either by the binder or cache)
-	int rpc_call_helper(Name &server_name, Function &func, void **args);
+	int rpc_call_helper(Name &server_name, Function &func, void **args, bool is_force_server_run = true);
 
 	bool check_func_name(char *name) const;
 } g;
@@ -76,12 +79,22 @@ int rpcInit()
 #ifndef NDEBUG
 	std::cout << "RPC INIT" << std::endl;
 #endif
+
+	if(g.server_id != -1)
+	{
+		return HAS_ALREADY_INIT_SERVER;
+	}
+
+	if(g.has_run_execute)
+	{
+		return HAS_RUN_EXECUTE;
+	}
+
 	g.server_fd = g.postman.bind_and_listen();
 
 	if(g.server_fd < 0)
 	{
 		// should not happen in the student environment
-		assert(false);
 		return g.server_fd;
 	}
 
@@ -97,7 +110,6 @@ int rpcInit()
 	if(binder_fd < 0)
 	{
 		// cannot connect to the binder
-		assert(false);
 		return BINDER_UNAVAILABLE;
 	}
 
@@ -105,8 +117,6 @@ int rpcInit()
 
 	if(retval < 0)
 	{
-		// should not happen...
-		assert(false);
 		return retval;
 	}
 
@@ -116,7 +126,6 @@ int rpcInit()
 	if(retval < 0)
 	{
 		// timeout
-		assert(false);
 		return retval;
 	}
 
@@ -128,7 +137,7 @@ int rpcInit()
 	return OK;
 }
 
-int Global::rpc_call_helper(Name &server_name, Function &func, void **args)
+int Global::rpc_call_helper(Name &server_name, Function &func, void **args, bool is_force_server_run)
 {
 	ScopedConnection target_conn(g.postman, server_name.ip, server_name.port);
 	int target_fd = target_conn.get_fd();
@@ -137,15 +146,15 @@ int Global::rpc_call_helper(Name &server_name, Function &func, void **args)
 	if(target_fd < 0)
 	{
 		// this can happen when the server (immediately) after the binder replies
-		assert(false);
 		return CANNOT_CONNECT_TO_SERVER;
 	}
 
-	retval = g.postman.send_execute(target_fd, func, args);
+	retval = g.postman.send_execute(target_fd, func, args, is_force_server_run);
 
 	if(retval < 0)
 	{
 		// couldn't send? maybe server disconnected after connection established
+		// or maybe is_force_server_run = true and server ran out of threads
 		return retval;
 	}
 
@@ -157,94 +166,80 @@ int Global::rpc_call_helper(Name &server_name, Function &func, void **args)
 		return retval;
 	}
 
-	unsigned remote_ns_version = req.message.ns_version;
-
-	if(remote_ns_version > g.ns.get_version())
-	{
-		// the server has more update-to-date logs, ask for it
-		// doesn't check for return value, let wait_for_desired() to handle it
-#ifndef NDEBUG
-		std::cout << "server has newer logs (their:" << remote_ns_version << ", mine:" << g.ns.get_version() << "), ask for updates" << std::endl;
-#endif
-		g.postman.send_ns_update(target_fd);
-		Postman::Request req;
-
-		if(wait_for_desired(Postman::NS_UPDATE_SENT, req, &target_fd) >= 0)
-		{
-			std::stringstream ss(req.message.str);
-			g.ns.apply_logs(ss);
-		}
-	}
-
 	std::stringstream ss(req.message.str);
-	int retval_got = pop_i32(ss);
+	g.ns.apply_logs(ss);
+	retval = pop_i32(ss);
 
-	for(size_t i = 0; i < func.types.size(); i++)
+	// only has output when the RPC call is successful
+	if(retval >= 0)
 	{
-		int arg_type = func.types[i];
-		size_t cardinality = get_arg_car(arg_type);
-
-		if(is_arg_output(arg_type))
+		for(size_t i = 0; i < func.types.size(); i++)
 		{
-			switch(get_arg_data_type(arg_type))
+			int arg_type = func.types[i];
+			size_t cardinality = get_arg_car(arg_type);
+
+			if(is_arg_output(arg_type))
 			{
-				case ARG_CHAR:
-					for(size_t j = 0; j < cardinality; j++)
-					{
-						((char*)args[i])[j] = pop_i8(ss);
-					}
+				switch(get_arg_data_type(arg_type))
+				{
+					case ARG_CHAR:
+						for(size_t j = 0; j < cardinality; j++)
+						{
+							((char*)args[i])[j] = pop_i8(ss);
+						}
 
-					break;
+						break;
 
-				case ARG_SHORT:
-					for(size_t j = 0; j < cardinality; j++)
-					{
-						short *argi = reinterpret_cast<short*>(args[i]);
-						argi[j] = pop_i16(ss);
-					}
+					case ARG_SHORT:
+						for(size_t j = 0; j < cardinality; j++)
+						{
+							short *argi = reinterpret_cast<short*>(args[i]);
+							argi[j] = pop_i16(ss);
+						}
 
-					break;
+						break;
 
-				case ARG_INT:
-					for(size_t j = 0; j < cardinality; j++)
-					{
-						int *argi = reinterpret_cast<int*>(args[i]);
-						argi[j] = pop_i32(ss);
-					}
+					case ARG_INT:
+						for(size_t j = 0; j < cardinality; j++)
+						{
+							int *argi = reinterpret_cast<int*>(args[i]);
+							argi[j] = pop_i32(ss);
+						}
 
-					break;
+						break;
 
-				case ARG_LONG:
-					for(size_t j = 0; j < cardinality; j++)
-					{
-						long *argi = reinterpret_cast<long*>(args[i]);
-						argi[j] = pop_i64(ss);
-					}
+					case ARG_LONG:
+						for(size_t j = 0; j < cardinality; j++)
+						{
+							long *argi = reinterpret_cast<long*>(args[i]);
+							argi[j] = pop_i64(ss);
+						}
 
-					break;
+						break;
 
-				case ARG_DOUBLE:
-					for(size_t j = 0; j < cardinality; j++)
-					{
-						double *argi = reinterpret_cast<double*>(args[i]);
-						argi[j] = pop_f64(ss);
-					}
+					case ARG_DOUBLE:
+						for(size_t j = 0; j < cardinality; j++)
+						{
+							double *argi = reinterpret_cast<double*>(args[i]);
+							argi[j] = pop_f64(ss);
+						}
 
-					break;
+						break;
 
-				case ARG_FLOAT:
-					for(size_t j = 0; j < cardinality; j++)
-					{
-						float *argi = reinterpret_cast<float*>(args[i]);
-						argi[j] = pop_f32(ss);
-					}
+					case ARG_FLOAT:
+						for(size_t j = 0; j < cardinality; j++)
+						{
+							float *argi = reinterpret_cast<float*>(args[i]);
+							argi[j] = pop_f32(ss);
+						}
 
-					break;
+						break;
+				}
 			}
 		}
 	}
 
-	return retval_got;
+	return retval;
 }
 
 int rpcCall(char* name, int* argTypes, void** args)
@@ -258,20 +253,20 @@ int rpcCall(char* name, int* argTypes, void** args)
 		return NOT_A_CLIENT;
 	}
 
-	if (argTypes == NULL) {
-		return FUNCTION_ARGS_ARE_INVALID;
-	}
-
 	// sanity check
 	if(!g.check_func_name(name))
 	{
 		return FUNCTION_NAME_IS_INVALID;
 	}
 
+	if(argTypes == NULL)
+	{
+		return FUNCTION_ARGS_ARE_INVALID;
+	}
+
 	int retval;
 	Postman::Request req;
 	Function func = to_function(name, argTypes);
-
 	// send a location request to the binder
 	{
 		ScopedConnection conn(g.postman, g.binder_hostname, g.binder_port);
@@ -280,7 +275,6 @@ int rpcCall(char* name, int* argTypes, void** args)
 		if(binder_fd < 0)
 		{
 			// cannot connect to the binder -- should not happen
-			assert(false);
 			return BINDER_UNAVAILABLE;
 		}
 
@@ -296,7 +290,6 @@ int rpcCall(char* name, int* argTypes, void** args)
 
 		if(retval < 0)
 		{
-			// timeout
 			return retval;
 		}
 	}
@@ -313,14 +306,14 @@ int rpcCall(char* name, int* argTypes, void** args)
 		if(retval < 0)
 		{
 			// cannot happen -- the database is synced with the binder
-			assert(false);
 			return retval;
 		}
 
 		return g.rpc_call_helper(name, func, args);
 	}
 
-	return pop_i32(ss);
+	retval = pop_i32(ss);
+	return retval;
 }
 
 int rpcCacheCall(char* name, int* argTypes, void** args)
@@ -334,7 +327,8 @@ int rpcCacheCall(char* name, int* argTypes, void** args)
 		return NOT_A_CLIENT;
 	}
 
-	if (argTypes == NULL) {
+	if(argTypes == NULL)
+	{
 		return FUNCTION_ARGS_ARE_INVALID;
 	}
 
@@ -346,54 +340,45 @@ int rpcCacheCall(char* name, int* argTypes, void** args)
 
 	unsigned server_id;
 	Function func = to_function(name, argTypes);
-
 	std::set<unsigned> duplicates;
-	bool is_binder_unavail = false;
 
-	// repeat suggest() loop twice, call the binder once
-	for(int i = 0; i < 2; i++)
+	while(g.ns.suggest(g.postman, func, server_id, false) >= 0)
 	{
-		while(g.ns.suggest(g.postman, func, server_id, false) >= 0)
+		Name server_name;
+
+		if(duplicates.find(server_id) != duplicates.end())
 		{
-			Name server_name;
-
-			if(duplicates.find(server_id) != duplicates.end())
-			{
-				// already ran in a cycle
-				return NO_AVAILABLE_SERVER;
-			}
-
-			duplicates.insert(server_id);
-
-			if(g.ns.resolve(server_id, server_name) < 0)
-			{
-				// bad try
-				continue;
-			}
-
-			return g.rpc_call_helper(server_name, func, args);
+			// maybe servers run out of threads; so try with rpcCall which forces the request to queue up the task
+			break;
 		}
 
-		// already called the binder once, and no more suggestion available, so quit
-		if(i == 1)
+		duplicates.insert(server_id);
+
+		if(g.ns.resolve(server_id, server_name) < 0)
 		{
-			return is_binder_unavail ? BINDER_UNAVAILABLE : NO_AVAILABLE_SERVER;
+			// bad try
+			continue;
 		}
 
-		// everything failed, try one last time with the binder
-		int retval = rpcCall(name, argTypes, args);
+		int retval = g.rpc_call_helper(server_name, func, args, false);
 
-		if(retval >= 0)
+		if(retval >= 0 || retval == SKELETON_FAILURE)
 		{
-			return OK;
+			return retval;
 		}
 
-		is_binder_unavail = retval == BINDER_UNAVAILABLE;
+#ifndef NDEBUG
+
+		if(retval == SERVER_HAS_NO_AVAIL_THREADS)
+		{
+			std::cout << "server has no available threads; moving on to the next candadate" << std::endl;
+		}
+
+#endif
 	}
 
-	// unreachable
-	assert(false);
-	return UNREACHABLE;
+	// everything failed, try one last time with the binder
+	return rpcCall(name, argTypes, args);
 }
 
 int rpcRegister(char* name, int* argTypes, skeleton f)
@@ -407,20 +392,25 @@ int rpcRegister(char* name, int* argTypes, skeleton f)
 		return NOT_A_SERVER;
 	}
 
-	// sanity check
-	if(f == NULL)
+	if(g.has_run_execute)
 	{
-		return SKELETON_IS_NULL;
-	}
-
-	if (argTypes == NULL) {
-		return FUNCTION_ARGS_ARE_INVALID;
+		return HAS_RUN_EXECUTE;
 	}
 
 	// sanity check
 	if(!g.check_func_name(name))
 	{
 		return FUNCTION_NAME_IS_INVALID;
+	}
+
+	if(argTypes == NULL)
+	{
+		return FUNCTION_ARGS_ARE_INVALID;
+	}
+
+	if(f == NULL)
+	{
+		return SKELETON_IS_NULL;
 	}
 
 	// only the server calls this methods, and hello is sent during init()
@@ -442,7 +432,6 @@ int rpcRegister(char* name, int* argTypes, skeleton f)
 	if(binder_fd < 0)
 	{
 		// cannot connect to the binder
-		assert(false);
 		return BINDER_UNAVAILABLE;
 	}
 
@@ -483,6 +472,18 @@ int rpcExecute()
 		return NOT_A_SERVER;
 	}
 
+	if(g.has_run_execute)
+	{
+		return HAS_RUN_EXECUTE;
+	}
+
+	g.has_run_execute = true;
+
+	if(g.num_func_registered() == 0)
+	{
+		return EXECUTE_WITHOUT_REGISTER;
+	}
+
 	int retval;
 	{
 		ScopedConnection conn(g.postman, g.binder_hostname, g.binder_port);
@@ -512,22 +513,27 @@ int rpcExecute()
 		int remote_fd = req.fd;
 		unsigned remote_ns_version = req.message.ns_version;
 		std::stringstream ss(req.message.str);
+		bool is_force_queue_task = pop_i8(ss);
 		Function func = func_from_sstream(ss);
 		std::pair<Function, skeleton> func_info;
 		retval = g.get_func_skel(func, func_info);
 
 		if(retval < 0)
 		{
-			// impossible -- client knows this function exists and server has the latest logs about its functions
-			assert(false);
-			return retval;
+			return g.postman.reply_execute(remote_fd, FUNCTION_NOT_REGISTERED, func, NULL, remote_ns_version);
 		}
+		else
+		{
+			// copy input
+			std::string data(req.message.str.substr(ss.tellg()));
+			Tasks::Task t(g.postman, remote_fd, g.server_name, func_info.first, func_info.second, data, remote_ns_version);
 
-		// copy input
-		std::string data(req.message.str.substr(ss.tellg()));
-		Tasks::Task t(g.postman, remote_fd, g.server_name, func_info.first, func_info.second, data, remote_ns_version);
-		// push call to the task queue and let other threads to handle it
-		tasks.push(t);
+			// push call to the task queue and let other threads to handle it
+			if(!tasks.push(t, is_force_queue_task))
+			{
+				g.postman.reply_execute(remote_fd, SERVER_HAS_NO_AVAIL_THREADS, func, NULL, remote_ns_version);
+			}
+		}
 	}
 
 	// kill all threads
@@ -658,6 +664,9 @@ int Global::wait_for_desired(int desired, Postman::Request &ret, int *need_alive
 				}
 
 				this->is_terminate = pop_i8(ss);
+#ifndef NDEBUG
+				std::cout << "TERMINATING SERVER" << std::endl;
+#endif
 				break;
 			}
 
@@ -704,9 +713,10 @@ int Global::wait_for_desired(int desired, Postman::Request &ret, int *need_alive
 
 bool Global::check_func_name(char *name) const
 {
-	if (name == NULL) {
-		return false;
-	}
-	size_t len = strlen(name);
-	return len == 0 || len > MAX_FUNC_NAME_LEN;
+	return name != NULL && (*name != '\0' && strlen(name) <= MAX_FUNC_NAME_LEN);
+}
+
+size_t Global::num_func_registered() const
+{
+	return this->function_map.size();
 }

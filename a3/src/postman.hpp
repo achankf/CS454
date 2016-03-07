@@ -30,10 +30,10 @@ public: // typedefs
 		LOC_REQUEST         = (1 <<  6),
 		LOC_REPLY           = (1 <<  7),
 		EXECUTE             = (1 <<  8),
-		EXECUTE_REPLY       = (1 <<  9),
-		CONFIRM_TERMINATE   = (1 << 10), // server ask this question to the binder
-		NEW_SERVER_EXECUTE  = (1 << 11),
-		TERMINATE           = (1 << 12)
+		EXECUTE_REPLY       = (1 << 10),
+		CONFIRM_TERMINATE   = (1 << 11), // server ask this question to the binder
+		NEW_SERVER_EXECUTE  = (1 << 12),
+		TERMINATE           = (1 << 13)
 	};
 	struct Message
 	{
@@ -80,7 +80,7 @@ public: // methods
 
 	// send requests
 	int send_confirm_terminate(int remote_fd, bool is_terminate = true);
-	int send_execute(int server_fd, const Function &func, void **args);
+	int send_execute(int server_fd, const Function &func, void **args, bool is_force_queue_task);
 	int send_iam_server(int binder_fd, int listen_port);
 	int send_loc_request(int binder_fd, const Function &func);
 	int send_new_server_execute(int remote_fd);
@@ -89,7 +89,7 @@ public: // methods
 	int send_terminate(int remote_fd);
 
 	// send replies
-	int reply_execute(int remote_fd, int retval_got, const Function &func, void **args, unsigned remote_ns_version);
+	int reply_execute(int remote_fd, int retval, const Function &func, void **args, unsigned remote_ns_version);
 	int reply_loc_request(int remote_fd, const Function &func, unsigned remote_ns_version);
 	int reply_ns_update(int remote_fd, unsigned remote_ns_version);
 	int reply_register(int remote_fd, unsigned remote_ns_version);

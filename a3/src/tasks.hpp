@@ -36,17 +36,19 @@ private: // data
 	pthread_t threads[MAX_THREADS];
 	pthread_mutex_t task_lock; // prevent conflict b/w Tasks obj and threads
 	sem_t task_sem; // notify threads
+	int num_tasks_avail;
 	bool is_terminate;
 
 private: // methods
 	Task pop();
+	void finished_a_task();
 
 public: // methods
 	Tasks();
 	~Tasks();
 
 	void terminate();
-	void push(Task &t);
+	bool push(Task &t, bool is_force_queue_task);
 
 	friend void *run_thread(void *data);
 };

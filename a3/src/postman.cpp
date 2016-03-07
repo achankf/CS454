@@ -49,9 +49,10 @@ int Postman::send_register(int binder_fd, int my_id, const Function &func)
 	return this->send(binder_fd, msg);
 }
 
-int Postman::send_execute(int server_fd, const Function &func, void **args)
+int Postman::send_execute(int server_fd, const Function &func, void **args, bool is_force_queue_task)
 {
 	std::stringstream ss;
+	push_i8(ss, is_force_queue_task);
 	push(ss, func);
 
 	for(size_t i = 0; i < func.types.size(); i++)
@@ -146,76 +147,79 @@ int Postman::send_execute(int server_fd, const Function &func, void **args)
 	return this->send(server_fd, msg);
 }
 
-int Postman::reply_execute(int remote_fd, int retval_got, const Function &func, void **args, unsigned remote_ns_version)
+int Postman::reply_execute(int remote_fd, int retval, const Function &func, void **args, unsigned remote_ns_version)
 {
 	std::stringstream ss;
-	push_i32(ss, retval_got);
+	ss << this->ns.get_logs(remote_ns_version);
+	push_i32(ss, retval);
 
-	// extract output
-	for(size_t i = 0; i < func.types.size(); i++)
+	if(retval >= 0)
 	{
-		int arg_type = func.types[i];
-		void * const argsi = args[i];
-		size_t cardinality = get_arg_car(arg_type);
-
-		if(!is_arg_output(arg_type))
+		// extract output
+		for(size_t i = 0; i < func.types.size(); i++)
 		{
-			continue;
-		}
+			int arg_type = func.types[i];
+			void * const argsi = args[i];
+			size_t cardinality = get_arg_car(arg_type);
 
-		switch(get_arg_data_type(arg_type))
-		{
-			case ARG_CHAR:
-				for(size_t j = 0; j < cardinality; j++)
-				{
-					push_i8(ss, ((char*)argsi)[j]);
-				}
+			if(!is_arg_output(arg_type))
+			{
+				continue;
+			}
 
-				break;
+			switch(get_arg_data_type(arg_type))
+			{
+				case ARG_CHAR:
+					for(size_t j = 0; j < cardinality; j++)
+					{
+						push_i8(ss, ((char*)argsi)[j]);
+					}
 
-			case ARG_SHORT:
-				for(size_t j = 0; j < cardinality; j++)
-				{
-					push_i16(ss, ((short*)args[i])[j]);
-				}
+					break;
 
-				break;
+				case ARG_SHORT:
+					for(size_t j = 0; j < cardinality; j++)
+					{
+						push_i16(ss, ((short*)args[i])[j]);
+					}
 
-			case ARG_INT:
-				for(size_t j = 0; j < cardinality; j++)
-				{
-					push_i32(ss, ((int*)args[i])[j]);
-				}
+					break;
 
-				break;
+				case ARG_INT:
+					for(size_t j = 0; j < cardinality; j++)
+					{
+						push_i32(ss, ((int*)args[i])[j]);
+					}
 
-			case ARG_LONG:
-				for(size_t j = 0; j < cardinality; j++)
-				{
-					push_i64(ss, ((long*)argsi)[j]);
-				}
+					break;
 
-				break;
+				case ARG_LONG:
+					for(size_t j = 0; j < cardinality; j++)
+					{
+						push_i64(ss, ((long*)argsi)[j]);
+					}
 
-			case ARG_DOUBLE:
-				for(size_t j = 0; j < cardinality; j++)
-				{
-					push_f64(ss, ((double*)args[i])[j]);
-				}
+					break;
 
-				break;
+				case ARG_DOUBLE:
+					for(size_t j = 0; j < cardinality; j++)
+					{
+						push_f64(ss, ((double*)args[i])[j]);
+					}
 
-			case ARG_FLOAT:
-				for(size_t j = 0; j < cardinality; j++)
-				{
-					push_f32(ss, ((float*)args[i])[j]);
-				}
+					break;
 
-				break;
+				case ARG_FLOAT:
+					for(size_t j = 0; j < cardinality; j++)
+					{
+						push_f32(ss, ((float*)args[i])[j]);
+					}
+
+					break;
+			}
 		}
 	}
 
-	ss << this->ns.get_logs(remote_ns_version);
 	Message msg = to_message(EXECUTE_REPLY, ss.str());
 	return this->send(remote_fd, msg);
 }
@@ -454,7 +458,10 @@ ScopedConnection::ScopedConnection(Postman &postman, const char *hostname, int p
 
 ScopedConnection::~ScopedConnection()
 {
-	postman.disconnect(fd); // fd can be -1; Sockets ignore bad fds
+	if(fd >= 0)
+	{
+		postman.disconnect(fd);
+	}
 }
 
 int ScopedConnection::get_fd() const

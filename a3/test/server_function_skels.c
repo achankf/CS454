@@ -57,3 +57,12 @@ int fvoid (int *argTypes, void **args) {
 	puts("awake");
   return 0; // just want to make sure this method ran
 }
+
+int finfinite(int* a, void** b)
+{
+	for(;;) {
+		puts("in an finite loop");
+		sleep(5);
+	}
+	return 0;
+}

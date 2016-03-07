@@ -181,9 +181,9 @@ int main() {
 
 	/* test overloading */
   assert(rpcCall("f4", argTypes4_o1, args4_o1) >= 0);
-  assert(rpcCall("f4", argTypes4, args4) == -1);
+  assert(rpcCall("f4", argTypes4, args4) < 0);
   assert(rpcCall("f4", argTypes4_o1, args4_o1) >= 0);
-  assert(rpcCall("f4", argTypes4, args4) == -1);
+  assert(rpcCall("f4", argTypes4, args4) < 0);
 
   /* rpcTerminate */
   printf("\ndo you want to terminate? y/n: ");

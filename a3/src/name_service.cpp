@@ -62,7 +62,7 @@ int NameService::suggest_helper(Postman &postman, const Function &func, unsigned
 	{
 		ScopedConnection conn(postman, name.ip, name.port);
 
-		if(conn.get_fd() != -1)
+		if(conn.get_fd() >= 0)
 		{
 #ifndef NDEBUG
 			std::cout << "suggestion for func:" << func.name << " to id:" << id << std::endl;
@@ -132,9 +132,7 @@ void NameService::register_fn_helper(unsigned id, const Function &func)
 void push(std::stringstream &ss, const Function &func)
 {
 	assert(func.name.size() <= MAX_FUNC_NAME_LEN);
-	unsigned char name_size = func.name.size();
-	std::string ret;
-	ss << name_size;
+	push_i32(ss, func.name.size());
 	push_i32(ss, func.types.size());
 	ss << func.name;
 
@@ -146,11 +144,10 @@ void push(std::stringstream &ss, const Function &func)
 
 Function func_from_sstream(std::stringstream &ss)
 {
-	unsigned char size;
-	ss >> size;
+	unsigned name_size = pop_i32(ss);
 	unsigned num_args = pop_i32(ss);
 	Function func;
-	func.name = raw_read(ss, size);
+	func.name = raw_read(ss, name_size);
 
 	for(size_t i = 0; i < num_args; i++)
 	{
@@ -172,7 +169,7 @@ int NameService::resolve_helper(unsigned id, Name &ret) const
 
 	if(it == this->id_to_name.end())
 	{
-		return NOT_IN_NAME_SERVICE;
+		return NO_AVAILABLE_SERVER;
 	}
 
 	ret = it->second;
@@ -191,7 +188,7 @@ int NameService::resolve_helper(const Name &name, unsigned &ret) const
 
 	if(it == this->name_to_id.end())
 	{
-		return NOT_IN_NAME_SERVICE;
+		return NO_AVAILABLE_SERVER;
 	}
 
 	ret = it->second;

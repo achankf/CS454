@@ -12,6 +12,7 @@ struct Name;
 
 enum ErrorNo
 {
+	EXECUTE_WITHOUT_REGISTER    =    2,
 	SKELETON_UPDATED            =    1,
 	OK                          =    0,
 	BAD_FD                      =   -1,
@@ -26,16 +27,19 @@ enum ErrorNo
 	FUNCTION_ARGS_ARE_INVALID   =  -10,
 	FUNCTION_NAME_IS_INVALID    =  -11,
 	FUNCTION_NOT_REGISTERED     =  -12,
-	NOTHING_TO_SEND             =  -13,
-	NOTHING_TO_RECEIVE          =  -14,
-	NOT_A_CLIENT                =  -15,
-	NOT_A_SERVER                =  -16,
-	NOT_IN_NAME_SERVICE         =  -17,
-	NO_AVAILABLE_SERVER         =  -18,
-	REMOTE_DISCONNECTED         =  -19,
-	SKELETON_IS_NULL            =  -20,
-	TERMINATING                 =  -21,
-	TIMEOUT                     =  -22,
+	HAS_ALREADY_INIT_SERVER     =  -13,
+	HAS_RUN_EXECUTE             =  -14,
+	NOTHING_TO_RECEIVE          =  -15,
+	NOTHING_TO_SEND             =  -16,
+	NOT_A_CLIENT                =  -17,
+	NOT_A_SERVER                =  -18,
+	NO_AVAILABLE_SERVER         =  -19,
+	REMOTE_DISCONNECTED         =  -20,
+	SKELETON_FAILURE            =  -21,
+	SKELETON_IS_NULL            =  -22,
+	SERVER_HAS_NO_AVAIL_THREADS =  -23,
+	TERMINATING                 =  -24,
+	TIMEOUT                     =  -25,
 	UNREACHABLE                 = -100
 };
 
