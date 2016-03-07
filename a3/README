@@ -1,0 +1,6 @@
+To build librpc.a and binder, simply type "make" in the same directory as the README
+
+To build the server/client executables, please link with the pthread library with "-lpthread"
+
+"Team" member:
+- Alfred Chan (a77chan)

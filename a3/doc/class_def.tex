@@ -1,0 +1,89 @@
+\section{Class Definitions}
+Before I go on to explain my system, I am going to go through the major components of the system that I will refer to throughout this document.
+
+\begin{itemize}
+\item
+{\bf Auxiliary methods} for binary-to-object conversions (both-ways): these methods are defined outside of class definition and are located in {\tt common.hpp}, {\tt name\_service.hpp} and private ones are defined in the dot-cpp source files.
+\item
+{\bf struct} {\tt Name}: this simple structure contains two integers ({\tt int}) that represent the ipv4 address and the port number.
+Obviously, this structure is used as the key of {\tt std::map} in the name directory, so there is a operator overload of ``$<$" that is based on {\tt std::pair}'s ``$<$" overload.
+
+\item
+{\bf struct} {\tt Function}: similarly to {\bf struct} {\tt Name}, this is also used as a key in the name directory.
+This structure is composed of a function's name (in {\tt std::string}), and a list of argument types (in {\tt std::vector<int>}).
+Again, the comparison operator is almost free, with one catch: the equivalence of two function signitures disregard array cardinality (in that array of size 1 is the same as array of size 100), so to address this problem the comparison operator call {\tt Function::to\_signiture()} to create another copies of the signitures whose array size can only be 0 (scalar) or 1 (array).
+Of course, when the {\bf server} calls a skeleton it needs to know the actual cardinality of the array types, so this means that the server needs to to store the original function signiture along with the modified version.
+
+\item
+{\bf struct} {\tt Postman::Message}: this structure is a quadruple that contains
+\begin{itemize}
+\item
+the version number ({\tt unsigned int}) of the name directory (I will cover this later)
+\item
+the size of the message ({\tt unsigned int}), which is used to allocate buffers
+\item
+the message type from the {\bf enum} {\tt Postman::MessageType}
+\item
+and finally the message contents ({\tt std::string})
+\end{itemize}
+
+\item
+{\bf struct} {\tt Postman::Request}: this structure is a pair of (file descriptor {\bf fd}, {\tt Postman::Message}).
+The major purpose of this structure is to be packed within a {\tt std::queue}, so that the caller can poll request from {\tt Postman} (explained later).
+
+In retrospect, storing the fd was an oversight, because my original intention was to buffer requests and allow the program to handle them at any time.
+This was true in my original codes, in which connections last for the whole program execution.
+However, I later changed connections to last based on the scope that the connection was established (thanks to C++'s RAII), so all requests must be handled while connections are still valid.
+
+\item
+{\bf class} {\tt Sockets}: this class tries to provide typesafe C++ bindings for the C-based Unix library from {\tt unistd.h}.
+All methods are unsynchronized, because it is intended to be a private object of another class.
+Most of the codes in this class are inherited from assignment 2.
+
+\item
+{\bf class} {\tt Postman}: this major class has 2 functionalities:
+\begin{itemize}
+\item
+to buffer raw messages from {\tt Sockets} and to handle marshalling of these raw messages by turning them into {\tt Postman::Message}, and then later into {\tt Postman::Request}
+\item
+to provide synchronized public access to {\tt Sockets} for connections, to the request queue, and to the internal {\tt Postman::Send(int, Message)} method.
+\end{itemize}
+
+In other words, this class is the ``workhorse" of network-related codes.
+
+\item
+{\bf class} {\tt NameService}: this class is responsible for maintaining various mappings that allows callers to resolve names and to get suggestion about which server can run a certain methods.
+The mappings include:
+\begin{itemize}
+\item
+a bidirectional mapping of {\tt Name} and {\tt int} ids.
+The mapping is simply based on two separate maps: {\tt std::map<Name,int>} and {\tt std::map<int,Name>}
+\item
+a mapping of {\tt Function} to pairs of {\tt std::set<int>} ids, and an integer pivot, where the pivot is used to suggest an id from the ids-set using Round-robin.
+\end{itemize}
+
+In additional to name resolving, {\tt NameService} has an internal log which can only affect by the binder.
+Clients and servers update their own name directory through the logs that come from the binder (more on that later).
+
+\item
+{\bf class} {\tt Global}: this class is located in {\tt rpc.cpp}, which takes advantages of RAII to serve initialized global variables for the C-functions in {\tt rpc.h}.
+This class is shared between the client codes and the server codes.
+For the server, {\tt Global} manages a mapping of {\tt Function} (modified) to the actual {\tt Function} objects and to the skeleton functions, as described earlier.
+
+\item
+{\bf class} {\tt Task}: this is simple structure that contains immutable data and a simple {\tt run()} method that allows the server to run a skeleton function.
+All data are copies of many struct/class described earliar.
+
+\item
+{\bf class} {\tt Tasks}: this is basically a synchronized queue of all {\tt Task}'s that a server will run.
+It manages worker threads which basically wait for new {\tt Task}'s by a semaphore.
+
+In addition, {\tt Tasks} provides a {\tt terminate{}} function, which changes the {\tt is\_terminate} flag and raise the semaphore by {\tt MAX\_THREADS}, allowing every threads to wake up and terminate by themselves; of course, {\tt terminate()} blocks until it finished joining the threads.
+
+\item
+{\bf class} {\tt ScopedConnection}: this is a simple class that establishes a connection through {\tt Postman}, and later when the object is out of scope, the destructor disconnects the connection through {\tt Postman} again.
+
+\item
+{\bf class} {\tt ScopedLock}: this is similar to {\tt ScopedConnection}, except this class handles the locking/unlocking a {\tt pthread} mutex.
+
+\end{itemize}
