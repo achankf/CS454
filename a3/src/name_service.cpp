@@ -276,6 +276,7 @@ bool operator< (const Name& lhs, const Name& rhs)
 
 Function to_function(const char *name_cstr, int *argTypes)
 {
+	assert(name_cstr != NULL);
 	assert(argTypes != NULL);
 	std::string name(name_cstr);
 

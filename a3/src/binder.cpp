@@ -76,7 +76,7 @@ int handle_request(Postman &postman, Postman::Request &req)
 			{
 				// should not happen
 				assert(false);
-				return -1;
+				return CANNOT_RESOLVE_HOSTNAME;
 			}
 
 			unsigned remote_id;
@@ -154,7 +154,7 @@ int handle_request(Postman &postman, Postman::Request &req)
 
 	// unreachable
 	assert(false);
-	return -1;
+	return UNREACHABLE;
 }
 
 int main()

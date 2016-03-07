@@ -7,6 +7,7 @@
 #include "tasks.hpp"
 #include <cassert>
 #include <cstdlib>
+#include <cstring>
 #include <deque>
 #include <map>
 #include <set>
@@ -64,6 +65,8 @@ public: //methods
 
 	// this is called after server_name is reserved (either by the binder or cache)
 	int rpc_call_helper(Name &server_name, Function &func, void **args);
+
+	bool check_func_name(char *name) const;
 } g;
 
 // ============== codes below ==============
@@ -249,15 +252,25 @@ int rpcCall(char* name, int* argTypes, void** args)
 #ifndef NDEBUG
 	std::cout << "RPC CALL" << std::endl;
 #endif
+
+	if(g.server_id != -1)
+	{
+		return NOT_A_CLIENT;
+	}
+
+	if (argTypes == NULL) {
+		return FUNCTION_ARGS_ARE_INVALID;
+	}
+
+	// sanity check
+	if(!g.check_func_name(name))
+	{
+		return FUNCTION_NAME_IS_INVALID;
+	}
+
 	int retval;
 	Postman::Request req;
 	Function func = to_function(name, argTypes);
-
-	// sanity check
-	if(func.name.empty())
-	{
-		return FUNCTION_NAME_IS_EMPTY;
-	}
 
 	// send a location request to the binder
 	{
@@ -315,14 +328,24 @@ int rpcCacheCall(char* name, int* argTypes, void** args)
 #ifndef NDEBUG
 	std::cout << "RPC cache call" << std::endl;
 #endif
-	unsigned server_id;
-	Function func = to_function(name, argTypes);
+
+	if(g.server_id != -1)
+	{
+		return NOT_A_CLIENT;
+	}
+
+	if (argTypes == NULL) {
+		return FUNCTION_ARGS_ARE_INVALID;
+	}
 
 	// sanity check
-	if(func.name.empty())
+	if(!g.check_func_name(name))
 	{
-		return FUNCTION_NAME_IS_EMPTY;
+		return FUNCTION_NAME_IS_INVALID;
 	}
+
+	unsigned server_id;
+	Function func = to_function(name, argTypes);
 
 	std::set<unsigned> duplicates;
 	bool is_binder_unavail = false;
@@ -378,8 +401,11 @@ int rpcRegister(char* name, int* argTypes, skeleton f)
 #ifndef NDEBUG
 	std::cout << "RPC REGISTER" << std::endl;
 #endif
-	// only the server calls this methods, and hello is sent during init()
-	Function func = to_function(name, argTypes);
+
+	if(g.server_id == -1)
+	{
+		return NOT_A_SERVER;
+	}
 
 	// sanity check
 	if(f == NULL)
@@ -387,12 +413,18 @@ int rpcRegister(char* name, int* argTypes, skeleton f)
 		return SKELETON_IS_NULL;
 	}
 
-	// sanity check
-	if(func.name.empty())
-	{
-		return FUNCTION_NAME_IS_EMPTY;
+	if (argTypes == NULL) {
+		return FUNCTION_ARGS_ARE_INVALID;
 	}
 
+	// sanity check
+	if(!g.check_func_name(name))
+	{
+		return FUNCTION_NAME_IS_INVALID;
+	}
+
+	// only the server calls this methods, and hello is sent during init()
+	Function func = to_function(name, argTypes);
 	int retval;
 	std::pair<Function, skeleton> not_used;
 	(void)not_used;
@@ -445,6 +477,12 @@ int rpcExecute()
 #ifndef NDEBUG
 	std::cout << "RPC EXECUTE" << std::endl;
 #endif
+
+	if(g.server_id == -1)
+	{
+		return NOT_A_SERVER;
+	}
+
 	int retval;
 	{
 		ScopedConnection conn(g.postman, g.binder_hostname, g.binder_port);
@@ -503,6 +541,12 @@ int rpcTerminate()
 #ifndef NDEBUG
 	std::cout << "RPC TERMINATE" << std::endl;
 #endif
+
+	if(g.server_id != -1)
+	{
+		return NOT_A_CLIENT;
+	}
+
 	ScopedConnection conn(g.postman, g.binder_hostname, g.binder_port);
 	int binder_fd = conn.get_fd();
 
@@ -656,4 +700,13 @@ int Global::wait_for_desired(int desired, Postman::Request &ret, int *need_alive
 
 	// is terminate
 	return TERMINATING; // didn't get the desired request, but is terminating
+}
+
+bool Global::check_func_name(char *name) const
+{
+	if (name == NULL) {
+		return false;
+	}
+	size_t len = strlen(name);
+	return len == 0 || len > MAX_FUNC_NAME_LEN;
 }

@@ -83,7 +83,7 @@ public: // methods
 	int send_execute(int server_fd, const Function &func, void **args);
 	int send_iam_server(int binder_fd, int listen_port);
 	int send_loc_request(int binder_fd, const Function &func);
-	int send_new_server_execute(int binder_fd);
+	int send_new_server_execute(int remote_fd);
 	int send_ns_update(int remote_fd);
 	int send_register(int binder_fd, int my_id, const Function &func);
 	int send_terminate(int remote_fd);

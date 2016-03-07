@@ -391,7 +391,7 @@ int Postman::receive_any(Request &ret)
 
 	if(this->incoming.empty())
 	{
-		return -1; // internal use only
+		return NOTHING_TO_RECEIVE;
 	}
 
 	// copy and remove
@@ -468,8 +468,8 @@ size_t Postman::is_alive(int fd)
 	return this->sockets.is_alive(fd);
 }
 
-int Postman::send_new_server_execute(int binder_fd)
+int Postman::send_new_server_execute(int remote_fd)
 {
 	Message msg = to_message(NEW_SERVER_EXECUTE, "");
-	return this->send(binder_fd, msg);
+	return this->send(remote_fd, msg);
 }
