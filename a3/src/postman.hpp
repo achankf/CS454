@@ -97,7 +97,7 @@ public: // methods
 	int reply_update_ns(int remote_fd, unsigned remote_ns_version);
 
 	// this is a blockying (busy-wait) method
-	int sync_and_receive_any(Request &ret, int *need_alive_fd = NULL, int timeout = DEFAULT_TIMEOUT);
+	int sync_and_receive_any(Request &ret, int *need_alive_fd = NULL);
 
 	// defined by TCP::Sockets::DataBuffer
 	virtual void read_avail(int fd, const std::string &got);

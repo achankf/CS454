@@ -107,16 +107,6 @@ std::string pop_string(std::stringstream &ss)
 	return raw_read(ss, size);
 }
 
-Timer::Timer(int timeout_in_seconds)
-	: start(std::clock()),
-	  timeout_in_seconds(timeout_in_seconds) {}
-
-bool Timer::is_timeout() const
-{
-	float duration = clock() - this->start;
-	return (duration / CLOCKS_PER_SEC) >= this->timeout_in_seconds;
-}
-
 void push_i8(std::stringstream &ss, char val)
 {
 	assert(sizeof(char) == 1);

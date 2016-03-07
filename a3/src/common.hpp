@@ -39,18 +39,7 @@ enum ErrorNo
 	SKELETON_IS_NULL            =  -22,
 	SERVER_HAS_NO_AVAIL_THREADS =  -23,
 	TERMINATING                 =  -24,
-	TIMEOUT                     =  -25,
 	UNREACHABLE                 = -100
-};
-
-class Timer
-{
-private: // data
-	clock_t start;
-	int timeout_in_seconds;
-public: // methods
-	Timer(int timeout_in_seconds = DEFAULT_TIMEOUT);
-	bool is_timeout() const;
 };
 
 class ScopedLock

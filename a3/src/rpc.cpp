@@ -62,9 +62,8 @@ public: //methods
 	int get_func_skel(const Function &func, std::pair<Function,skeleton> &ret);
 	size_t num_func_registered() const;
 
-	// wait for desired request (-1 means timeout; 0 means ok)
 	// desired contains flags of Postman::MessageType
-	int wait_for_desired(int desired, Postman::Request &ret, int *need_alive_fd = NULL, int timeout = DEFAULT_TIMEOUT);
+	int wait_for_desired(int desired, Postman::Request &ret, int *need_alive_fd = NULL);
 
 	// this is called after server_name is reserved (either by the binder or cache)
 	int rpc_call_helper(Name &server_name, Function &func, void **args, bool is_force_server_run = true);
@@ -125,7 +124,6 @@ int rpcInit()
 
 	if(retval < 0)
 	{
-		// timeout
 		return retval;
 	}
 
@@ -506,7 +504,6 @@ int rpcExecute()
 
 		if(g.wait_for_desired(Postman::EXECUTE, req) < 0)
 		{
-			// timeout or decided to terminated
 			continue;
 		}
 
@@ -593,18 +590,10 @@ int Global::get_func_skel(const Function &func, std::pair<Function,skeleton> &re
 	return OK;
 }
 
-int Global::wait_for_desired(int desired, Postman::Request &ret, int *need_alive_fd, int timeout)
+int Global::wait_for_desired(int desired, Postman::Request &ret, int *need_alive_fd)
 {
-	Timer timer(timeout); // double-timer
-
 	while(!this->is_terminate)
 	{
-		if(timer.is_timeout())
-		{
-			// timeout
-			return TIMEOUT;
-		}
-
 		if(need_alive_fd != NULL && !postman.is_alive(*need_alive_fd))
 		{
 			// need-alive target has been disconnected, so error
@@ -658,8 +647,6 @@ int Global::wait_for_desired(int desired, Postman::Request &ret, int *need_alive
 
 				if(wait_for_desired(Postman::CONFIRM_TERMINATE, ret, &binder_fd) < 0)
 				{
-					// timeout -- assume failure
-					assert(false);
 					break;
 				}
 
@@ -683,7 +670,7 @@ int Global::wait_for_desired(int desired, Postman::Request &ret, int *need_alive
 
 				Postman::Request req;
 
-				if(wait_for_desired(Postman::NS_UPDATE_SENT, req, &binder_fd, timeout) >= 0)
+				if(wait_for_desired(Postman::NS_UPDATE_SENT, req, &binder_fd) >= 0)
 				{
 					std::stringstream ss(req.message.str);
 					this->ns.apply_logs(ss);

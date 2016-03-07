@@ -256,10 +256,8 @@ int Postman::reply_register(int remote_fd, unsigned remote_ns_version)
 	return send(remote_fd, msg);
 }
 
-int Postman::sync_and_receive_any(Request &ret, int *need_alive_fd, int timeout)
+int Postman::sync_and_receive_any(Request &ret, int *need_alive_fd)
 {
-	Timer timer(timeout);
-
 	// busy-wait until "good to see you" reply is back
 	while(this->receive_any(ret) < 0)
 	{
@@ -276,11 +274,6 @@ int Postman::sync_and_receive_any(Request &ret, int *need_alive_fd, int timeout)
 			// some error occurred
 			//TODO ???
 			assert(false);
-		}
-
-		if(timer.is_timeout())
-		{
-			return TIMEOUT;
 		}
 	}
 
