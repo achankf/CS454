@@ -49,7 +49,6 @@ public: // typedefs
 	// the following should simulate bidirectional search
 	typedef std::map<Name,unsigned> LeftMap; // Name to id
 	typedef std::map<unsigned,Name> RightMap; // id to Name
-	typedef std::map<unsigned,int> ListenPortMap; // id to port (only servers have entries)
 	typedef std::map<Function, NameIdsWithPivot> FuncPivots;
 private: // data
 	LeftMap name_to_id;
