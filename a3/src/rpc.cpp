@@ -38,6 +38,7 @@ public: //public
 	bool has_run_execute;
 	bool is_terminate;
 	Name server_name;
+	bool has_run_calls;
 
 	// binder (used by both clients and servers)
 	const char *binder_hostname;
@@ -50,6 +51,7 @@ public: //methods
 		  server_id(-1),
 		  has_run_execute(false),
 		  is_terminate(false),
+		  has_run_calls(false),
 		  binder_hostname(getenv("BINDER_ADDRESS")),
 		  binder_port(strtol(getenv("BINDER_PORT"), NULL, 10))
 	{
@@ -87,6 +89,11 @@ int rpcInit()
 	if(g.has_run_execute)
 	{
 		return HAS_RUN_EXECUTE;
+	}
+
+	if(g.has_run_calls)
+	{
+		return NOT_A_SERVER;
 	}
 
 	g.server_fd = g.postman.bind_and_listen();
@@ -251,6 +258,8 @@ int rpcCall(char* name, int* argTypes, void** args)
 		return NOT_A_CLIENT;
 	}
 
+	g.has_run_calls = true;
+
 	// sanity check
 	if(!g.check_func_name(name))
 	{
@@ -324,6 +333,8 @@ int rpcCacheCall(char* name, int* argTypes, void** args)
 	{
 		return NOT_A_CLIENT;
 	}
+
+	g.has_run_calls = true;
 
 	if(argTypes == NULL)
 	{
