@@ -1,49 +1,64 @@
 \section{Error Numbers}
-Well, when I did the assignment, I used assert statements to handle bugs and used a generic $-1$ as the error number.
-So, the following is an afterthought, and the names are as excessively descriptive as I can briefly discuss.
-The following enum is defined in {\tt common.hpp}.
-
-\begin{verbatim}
-SKELETON_UPDATED            =    1,
-OK                          =    0,
-BAD_FD                      =   -1,
-BINDER_UNAVAILABLE          =   -2,
-CANNOT_ACCEPT_CONNECTION    =   -3,
-CANNOT_BIND_PORT            =   -4,
-CANNOT_CONNECT_TO_SERVER    =   -5,
-CANNOT_LISTEN_PORT          =   -6,
-CANNOT_RESOLVE_HOSTNAME     =   -7,
-CANNOT_START_CONNECTION     =   -8,
-CANNOT_WRITE_TO_SOCKET      =   -9,
-FUNCTION_ARGS_ARE_INVALID   =  -10,
-FUNCTION_NAME_IS_INVALID    =  -11,
-FUNCTION_NOT_REGISTERED     =  -12,
-NOTHING_TO_SEND             =  -13,
-NOTHING_TO_RECEIVE          =  -14,
-NOT_A_CLIENT                =  -15,
-NOT_A_SERVER                =  -16,
-NOT_IN_NAME_SERVICE         =  -17,
-NO_AVAILABLE_SERVER         =  -18,
-REMOTE_DISCONNECTED         =  -19,
-SKELETON_IS_NULL            =  -20,
-TERMINATING                 =  -21,
-TIMEOUT                     =  -22,
-UNREACHABLE                 = -100
-\end{verbatim}
-
-Notice, though, if you get $-100$ as a return value, then it's a programming bug because unreachable codes were reached.
-
-In addition to internal errors, I also made some design decisions that may be conflicting with the specification.
-Namely, the following are considered errors
+The following errors/warnings are defined in an enum in {\tt common.hpp}.
 \begin{itemize}
 \item
-Function whose name is null, or {\bf not} $0 < $ length $\le 64$.
+{\tt EXECUTE\_WITHOUT\_REGISTER} (2): this is a warning that the server runs {\tt rpcExecute} without registering any functions.
+In case this happens, {\tt rpcExecute} immediately terminates and return this warning.
+\item
+{\tt SKELETON\_UPDATED} (1): this warnings that the server re-registers a method, and only the skeleton is updated.
+\item
+{\tt OK} (0): this means successful.
+\item
+{\tt BAD\_FD} (-1): this happens when {\tt Sockets} couldn't create a socket.
+\item
+{\tt BINDER\_UNAVAILABLE} (-2): the binder is down.
+\item
+{\tt CANNOT\_ACCEPT\_CONNECTION} (-3): this happens when {\tt Sockets} cannot accept a connection.
+\item
+{\tt CANNOT\_BIND\_PORT} (-4): this happens when {\tt Sockets} cannot bind a port.
+\item
+{\tt CANNOT\_CONNECT\_TO\_SERVER} (-5): this happens when a client cannot connect to a server.
+\item
+{\tt CANNOT\_LISTEN\_PORT} (-6): the binder/server cannot set a port to listen to incoming messages.
+\item
+{\tt CANNOT\_RESOLVE\_HOSTNAME} (-7): the local name directory (binder/clients/servers) cannot find the hostname.
+\item
+{\tt CANNOT\_START\_CONNECTION} (-8): binder/clients/servers cannot start a connection.
+\item
+{\tt CANNOT\_WRITE\_TO\_SOCKET} (-9): cannot write to a socket.
+\item
+{\tt FUNCTION\_ARGTYPES\_ARE\_INVALID} (-10): {\tt argTypes} is {\tt NULL}
+\item
+{\tt FUNCTION\_NAME\_IS\_INVALID} (-11): functions whose name is null, or {\bf not} $0 < $ length $\le 63$ (this excludes the null terminator).
 Notice valid names must have a length that is strictly greater than 0.
 \item
-{\tt argTypes} is {\tt NULL}.
+{\tt FUNCTION\_NOT\_REGISTERED} (-12): client tries to call a function that a server did not register.
 \item
-The client calls {\tt rpcRegister}, {\tt rpcExecute}.
-Though, the client can call {\tt rpcInit}, which becomes a server, and there is no going back.
+{\tt HAS\_ALREADY\_INIT\_SERVER} (-13): the server calls {\tt rpcInit} more than once.
+This error number is returned by {\tt rpcInit}.
 \item
-The server calls {\tt rpcCall}, {\tt rpcCacheCall}, and {\tt rpcTerminate}.
+{\tt HAS\_RUN\_EXECUTE} (-14): the server attempts to run {\tt rpcExecute} more than once.
+\item
+{\tt NOTHING\_TO\_RECEIVE} (-15): {\tt select()} tells {\tt Sockets} to fill up the read buffer, but there's nothing to fill.
+\item
+{\tt NOTHING\_TO\_SEND} (-16): {\tt select()} tells {\tt Sockets} to clear the write buffer, but there's nothing to write.
+\item
+{\tt NOT\_A\_CLIENT} (-17): a server (i.e. {\tt rpcInit()} has run) tries to run client methods: {\tt rpcCall}, {\tt rpcCacheCall}, and {\tt rpcTerminate}
+\item
+{\tt NOT\_A\_SERVER} (-18): a client tries to run server methods: {\tt rpcInit}, {\tt rpcRegister}, and {\tt rpcExecute}.
+\item
+{\tt NO\_SERVER\_AVAILABLE} (-19): the name directory cannot find a server to complete requests.
+\item
+{\tt REMOTE\_DISCONNECTED} (-20): the remote machine disconnected before the calling machine gets a reply.
+\item
+{\tt SKELETON\_FAILURE} (-21): the skeleton function returns a negative value.
+\item
+{\tt SKELETON\_IS\_NULL} (-22): the provided skeleton is a {\tt NULL} pointer.
+\item
+{\tt SERVER\_HAS\_NO\_AVAIL\_THREADS} (-23): the server rejects a request because it doesn't have any free worker threads.
+This only happens when you call {\tt rpcCacheCall}, because it defies round-robin.
+\item
+{\tt TERMINATING} (-24): this represents the server is terminating -- this is probably not a ``public-facing" errno.
+\item
+{\tt UNREACHABLE} (-100): unreachable codes reached; in other words, gg.
 \end{itemize}

@@ -1,0 +1,7 @@
+\section{Optimization}
+In addition to the scoped connections, I did simple load balancing in {\tt rpcCacheCall}.
+If a client tries to probe servers that does not have free worker threads, the servers reject the call.
+The client needs to move on until either 1) it finds a server that has free worker threads, or 2) all candadates have been exhausted.
+The latter case is the same case when all servers are perceived to be dead, so {\tt rpcCall} will be used as fallback.
+Notice {\tt rpcCall} always forces the server to add a task regardless of having free worker threads.
+In a sense, this optimization may potentially increase the number connections, but it is a fair tradeoff to reduce the convoy effect as much as possible.

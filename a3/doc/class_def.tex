@@ -1,27 +1,28 @@
 \section{Class Definitions}
-Before I go on to explain my system, I am going to go through the major components of the system that I will refer to throughout this document.
+This section describes each major class in the system.
+In addition to classes, a file named ``common.hpp'' contains utility methods that is shared amongst most classes.
+These utility methods are for converting between C++ structures and raw data.
 
 \begin{itemize}
 \item
-{\bf Auxiliary methods} for binary-to-object conversions (both-ways): these methods are defined outside of class definition and are located in {\tt common.hpp}, {\tt name\_service.hpp} and private ones are defined in the dot-cpp source files.
-\item
-{\bf struct} {\tt Name}: this simple structure contains two integers ({\tt int}) that represent the ipv4 address and the port number.
-Obviously, this structure is used as the key of {\tt std::map} in the name directory, so there is a operator overload of ``$<$" that is based on {\tt std::pair}'s ``$<$" overload.
+{\bf struct} {\tt Name}: this simple structure contains two integers that represent an ipv4 address and a port number.
+Obviously, this structure is used as a key type for {\tt std::map} in the name directory, so there is a operator overload of ``$<$'' that is based on {\tt std::pair}'s ``$<$'' overload.
 
 \item
-{\bf struct} {\tt Function}: similarly to {\bf struct} {\tt Name}, this is also used as a key in the name directory.
+{\bf struct} {\tt Function}: similarly to {\bf struct} {\tt Name}, this structure  is also used as a key type in the name directory.
 This structure is composed of a function's name (in {\tt std::string}), and a list of argument types (in {\tt std::vector<int>}).
-Again, the comparison operator is almost free, with one catch: the equivalence of two function signitures disregard array cardinality (in that array of size 1 is the same as array of size 100), so to address this problem the comparison operator call {\tt Function::to\_signiture()} to create another copies of the signitures whose array size can only be 0 (scalar) or 1 (array).
+Again, the comparison operator is almost free, but with one catch: the equivalence of two function signitures disregard array cardinality (i.e.\ an array of size 1 is treated the same as an array of size 100), so to address this problem the comparison operator call {\tt Function::to\_signiture()} to create another copies of the signitures whose array size can only be 0 (scalar) or 1 (array).
 
-Notice that overloading the "$<$" operator for {\tt Function} effectively solves function overloading for the RPC system, since equivalence of argument types is the same as item-by-item comparison of {\tt std::vector<int>}, given that the argument types are inserted to the vector in the same order as in {\tt argTypes}.
+Notice that overloading {\tt operator<} for {\tt Function} effectively solves function overloading for the RPC system, since equivalence of argument types is the same as item-by-item comparison of {\tt std::vector<int>}, given that the argument types are inserted to the vector in the same order as in {\tt argTypes}.
 
-Of course, when the {\bf server} calls a skeleton it needs to know the actual cardinality of the array types, so this means that the server needs to to store the original function signiture along with the modified version.
+Of course, when the {\bf server} calls a skeleton it needs to know the actual cardinality of the array types.
+This means the server needs to to store the original function signiture along with the modified version.
 
 \item
 {\bf struct} {\tt Postman::Message}: this structure is a quadruple that contains
 \begin{itemize}
 \item
-the version number ({\tt unsigned int}) of the name directory (I will cover this later)
+the version number ({\tt unsigned int}) of the name directory
 \item
 the size of the message ({\tt unsigned int}), which is used to allocate buffers
 \item
@@ -29,17 +30,19 @@ the message type from the {\bf enum} {\tt Postman::MessageType}
 \item
 and finally the message contents ({\tt std::string})
 \end{itemize}
+All send methods in {\tt Postman} are basically message composers, and they uniformly pass the created message to the function {\tt Postman::send(int, Message)}.
 
 \item
-{\bf struct} {\tt Postman::Request}: this structure is a pair of (file descriptor {\bf fd}, {\tt Postman::Message}).
-The major purpose of this structure is to be packed within a {\tt std::queue}, so that the caller can poll request from {\tt Postman} (explained later).
+{\bf struct} {\tt Postman::Request}: this structure is a pair of a file descriptor and a {\tt Postman::Message}.
+The purpose of this structure is to be packed within a {\tt std::queue}, so that the caller can poll request from {\tt Postman}.
 
 In retrospect, storing the fd was an oversight, because my original intention was to buffer requests and allow the program to handle them at any time.
-This was true in my original codes, in which connections last for the whole program execution.
-However, I later changed connections to last based on the scope that the connection was established (thanks to C++'s RAII), so all requests must be handled while connections are still valid.
+This was true in my original codes, because connections last for the whole program execution.
+However, I later changed the duration of connections to be based on the scope that the connection was established (thanks to C++'s RAII), so all requests must be handled while connections are still valid.
+The intention is to minimize the number of active connections for the binder.
 
 \item
-{\bf class} {\tt Sockets}: this class tries to provide typesafe C++ bindings for the C-based Unix library from {\tt unistd.h}.
+{\bf class} {\tt Sockets}: this class provide type-safe C++ bindings for the C-based network library.
 All methods are unsynchronized, because it is intended to be a private object of another class.
 Most of the codes in this class are inherited from assignment 2.
 
@@ -49,46 +52,48 @@ Most of the codes in this class are inherited from assignment 2.
 \item
 to buffer raw messages from {\tt Sockets} and to handle marshalling of these raw messages by turning them into {\tt Postman::Message}, and then later into {\tt Postman::Request}
 \item
-to provide synchronized public access to {\tt Sockets} for connections, to the request queue, and to the internal {\tt Postman::Send(int, Message)} method.
+to provide synchronized public access to {\tt Sockets} for connections, to the request queue, and to create messages and feed them to the internal method {\tt Postman::Send(int, Message)}.
 \end{itemize}
 
-In other words, this class is the ``workhorse" of network-related codes.
+In other words, this class is the ``workhorse'' of network-related codes.
 
 \item
-{\bf class} {\tt NameService}: this class is responsible for maintaining various mappings that allows callers to resolve names and to get suggestion about which server can run a certain methods.
+{\bf class} {\tt NameService}: this class is responsible for maintaining various mappings that allows callers to resolve names and to get suggestions about available servers.
 The mappings include:
 \begin{itemize}
 \item
-a bidirectional mapping of {\tt Name} and {\tt int} ids.
+a bidirectional mapping of {\tt Name}'s and {\tt int} ids.
 The mapping is simply based on two separate maps: {\tt std::map<Name,int>} and {\tt std::map<int,Name>}
 \item
-a mapping of {\tt Function} to pairs of {\tt std::set<int>} ids, and an integer pivot, where the pivot is used to suggest an id from the ids-set using Round-robin.
-Notice that {\bf each function has its own pivot}, which allows binder's suggestions to conform the specification.
-Also, the pivots are {\bf local} values that are {\bf not} sychronized along with the name directory, so the binder can have different pivots than the server and the clients, assuming the clients run {\tt rpcCacheCall}.
+a mapping of {\tt Function}'s to pairs of {\tt std::set<int>} ids, and an integer pivot, where the pivot decides scheduling using round robin.
+Note that each function has its own pivot.
+Also, the pivots are {\bf local} values that are {\bf not} sychronized along with the name directory, so the binder can have different pivots than the server and the clients.
 \end{itemize}
 
 In additional to name resolving, {\tt NameService} has an internal log which can only affect by the binder.
-Clients and servers update their own name directory through the logs that come from the binder (more on that later).
+It uses a very simple version of timestamp ordering, such that there is no conflict and no abort.
+Clients and servers update their own name directory through the logs that come from every reply (even not from the binder).
 
 \item
 {\bf class} {\tt Global}: this class is located in {\tt rpc.cpp}, which takes advantages of RAII to serve initialized global variables for the C-functions in {\tt rpc.h}.
 This class is shared between the client codes and the server codes.
-For the server, {\tt Global} manages a mapping of {\tt Function} (modified) to the actual {\tt Function} objects and to the skeleton functions, as described earlier.
+For the server, {\tt Global} manages a mapping of {\tt Function} (modified) to pairs of a actual {\tt Function} object and a skeleton function.
 
 \item
-{\bf class} {\tt Task}: this is simple structure that contains immutable data and a simple {\tt run()} method that allows the server to run a skeleton function.
-All data are copies of many struct/class described earliar.
+{\bf class} {\tt Task}: this structure has a simple {\tt run()} method that allows servers to run a call request.
+All data are immutable copies of many struct/class described earliar.
 
 \item
-{\bf class} {\tt Tasks}: this is basically a synchronized queue of all {\tt Task}'s that a server will run.
+{\bf class} {\tt Tasks}: this is basically a synchronized queue of {\tt Task}'s.
+Each server has one.
 It manages worker threads which basically wait for new {\tt Task}'s by a semaphore.
 
 In addition, {\tt Tasks} provides a {\tt terminate{}} function, which changes the {\tt is\_terminate} flag and raise the semaphore by {\tt MAX\_THREADS}, allowing every threads to wake up and terminate by themselves; of course, {\tt terminate()} blocks until it finished joining the threads.
 
 \item
-{\bf class} {\tt ScopedConnection}: this is a simple class that establishes a connection through {\tt Postman}, and later when the object is out of scope, the destructor disconnects the connection through {\tt Postman} again.
+{\bf class} {\tt ScopedConnection}: this is a simple class that establishes a connection through {\tt Postman}, and later when the object is out of scope, the destructor disconnects the connection through {\tt Postman}.
 
 \item
-{\bf class} {\tt ScopedLock}: this is similar to {\tt ScopedConnection}, except this class handles the locking/unlocking a {\tt pthread} mutex.
+{\bf class} {\tt ScopedLock}: this is similar to {\tt ScopedConnection}, except this class handles the locking/unlocking of a {\tt pthread} mutex.
 
 \end{itemize}
