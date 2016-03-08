@@ -259,7 +259,7 @@ int rpcCall(char* name, int* argTypes, void** args)
 
 	if(argTypes == NULL)
 	{
-		return FUNCTION_ARGS_ARE_INVALID;
+		return FUNCTION_ARGTYPES_INVALID;
 	}
 
 	int retval;
@@ -327,7 +327,7 @@ int rpcCacheCall(char* name, int* argTypes, void** args)
 
 	if(argTypes == NULL)
 	{
-		return FUNCTION_ARGS_ARE_INVALID;
+		return FUNCTION_ARGTYPES_INVALID;
 	}
 
 	// sanity check
@@ -403,7 +403,7 @@ int rpcRegister(char* name, int* argTypes, skeleton f)
 
 	if(argTypes == NULL)
 	{
-		return FUNCTION_ARGS_ARE_INVALID;
+		return FUNCTION_ARGTYPES_INVALID;
 	}
 
 	if(f == NULL)
