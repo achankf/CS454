@@ -21,18 +21,9 @@ int main() {
   void **args0;
     
   /* rpcCacheCalls */
-  printf("retval:%d\n", rpcCall("fvoid", argTypes0, NULL));
-  printf("retval:%d\n", rpcCall("fvoid", argTypes0, NULL));
-  printf("retval:%d\n", rpcCall("fvoid", argTypes0, NULL));
-  printf("retval:%d\n", rpcCall("fvoid", argTypes0, NULL));
-  printf("retval:%d\n", rpcCall("fvoid", argTypes0, NULL));
-  printf("retval:%d\n", rpcCacheCall("fvoid", argTypes0, NULL));
-  printf("retval:%d\n", rpcCacheCall("fvoid", argTypes0, NULL));
-  printf("retval:%d\n", rpcCacheCall("fvoid", argTypes0, NULL));
-  printf("retval:%d\n", rpcCacheCall("fvoid", argTypes0, NULL));
-  printf("retval:%d\n", rpcCacheCall("fvoid", argTypes0, NULL));
-  printf("retval:%d\n", rpcCacheCall("fvoid", argTypes0, NULL));
-  printf("retval:%d\n", rpcCacheCall("fvoid", argTypes0, NULL));
+	for (;;) {
+  	printf("retval:%d\n", rpcCall("fvoid", argTypes0, NULL));
+	}
 
   /* rpcTerminate */
   printf("\ndo you want to terminate? y/n: ");
