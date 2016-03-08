@@ -39,10 +39,10 @@ int NameService::suggest_helper(Postman &postman, const Function &func, unsigned
 	}
 
 	// update the pivot
-	pair.second = (pair.second + 1) % ids.size();
+	int next = (pair.second + 1) % ids.size();
 	// get the k-th element (pivot)
 	NameIds::iterator it = ids.begin();
-	std::advance(it, pair.second);
+	std::advance(it, next);
 	// pivot is between [0,ids.size()]; therefore it must point to something
 	assert(it != ids.end());
 	// test if the server is still alive
@@ -67,6 +67,7 @@ int NameService::suggest_helper(Postman &postman, const Function &func, unsigned
 #ifndef NDEBUG
 			std::cout << "suggestion for func:" << func.name << " to id:" << id << std::endl;
 #endif
+			pair.second = next;
 			// bingo! this server is still alive
 			ret = id;
 			return OK;
