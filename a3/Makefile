@@ -8,3 +8,4 @@ all:
 clean:
 	rm -f binder librpc.a
 	make -C src clean
+	make -C test clean

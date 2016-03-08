@@ -16,4 +16,4 @@ all:
 .phony: clean
 
 clean:
-	rm -f client1 server *.o *.a
+	rm -f client1 client2 client3  server server2 bad_server1 bad_client1 *.o *.a
