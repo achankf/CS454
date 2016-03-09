@@ -25,6 +25,43 @@ This entry associates a function definition to the server machine of {\tt id}.
 Notice that a server always has up-to-date information about itself, because each request that affects the binder's name directory has a reply with the changes attached.
 Also, when a server runs {\tt rpcExecute}, it forces the binder to broadcast {\tt NEW\_SERVER\_EXECUTE}, which causes all servers to ask the binder for the latest updates.
 
+\subsection{The Simple \tt rpcCacheCall}
+The algorithm is the same as the one described by the specification.
+The algorithm goes like this
+\begin{algorithm}
+let S be an empty set of integer ids
+while local name directory has suggestions
+	// round-robin, same code as the binder
+	let i be the suggestion
+
+	if i is in S then break // reaching a cycle
+	otherwise let S = S union {i}
+
+	let server be resolve(i) from the name directory
+
+	start a scoped connection to server
+		if server is connected then
+			send EXECUTE request
+			return if got either OK or SKELETON_FAILURE
+		end if
+	end connection // happens automatically by RAII
+
+end while loop
+
+// local cache failed, so use the binder as fallback
+run rpcCall and return whatever from it
+\end{algorithm}
+
+Notice that the a set is used to detect cycles.
+That's right, it is possible that there alive servers but they reject the execute request due to having no available worker threads (see optimization, the last section).
+To keen readers, you may argue that returning the pivot is more efficient, which I just realize at the time writing.
+That's true, since the pivot wraps around the container, so comparing $i$ to the pivot is an easy way to detect a cycle.
+But, but, but, {\tt NameService::suggest()} is amortized $\Theta(n)$ (number of candadates)  anyways, to due {\tt std::advance}, and running an extra $\Theta(\log n)$ for {\tt std::set::find} and {\tt std::set:insert} won't hurt anyways, right?
+In fact, had I store the iterator instead of a pivot the cost of {\tt suggest} may become amortized $O(1)$.
+Well, I am just lazy to the change the codes.
+
+Ok, I admit I am just high, since I haven't used the listing environment since taking my last algorithm course.
+
 \subsection{Cases When Name Directory Is Not Up-to-date}
 Recall my design decision that all remote connections are scoped.
 This means the binder doesn't know immediately when a server dies (for whatever unnatural reasons).
@@ -64,4 +101,4 @@ The client moves on to the next candadate.
 \end{itemize}
 \end{itemize}
 
-In any case, I think it is reasonable to assume that servers stay up with little down time, so the size of logs is amortized to $O(1)$ -- mostly consist of an integer (zero) that represents the number of log entries and nothing follow.
+In any case, I think it is reasonable to assume that servers stay up with little down time, which makes the logs grow very little in rare occassion. So the size of logs in each message is amortized $O(1)$ -- mostly consist of an integer (zero) that represents the number of log entries and nothing follow after.

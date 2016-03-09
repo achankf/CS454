@@ -45,7 +45,8 @@ The intention is to minimize the number of active connections for the binder.
 {\bf class} {\tt Sockets}: this class provide type-safe C++ bindings for the C-based network library.
 All methods are unsynchronized, because it is intended to be a private object of another class.
 Most of the codes in this class are inherited from assignment 2.
-
+I wanted this class to be a silver bullet for approaching Unix network sockets, but obviously it's flawed.
+In any case, this class is much more robust than the one I wrote for CS456, since I did it in C.
 \item
 {\bf class} {\tt Postman}: this major class has 2 functionalities:
 \begin{itemize}
