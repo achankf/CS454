@@ -162,3 +162,123 @@ message-based communication
 - asynchronous - sender continues immediately after a send; store in receiving host's local buffer or at the first communication server
 - transient - "if not delivered = lost"
 - persistent - store in the communication system until message is delivered
+
+Slide 4
+
+requirements on name services
+- usage of a convention for unique global naming
+- scalability
+- consistency
+- performance & availability
+- adaptability to change
+- fault isolation
+
+DNS namespace distribution
+- global (top-level)
+- administrational (organization)
+- managerial (local)
+
+DNS issues
+- partitioning
+- replication
+- caching
+
+DNS navigation
+- iterative
+	- client-controlled - client asks each DNS server to resolve name
+	- server-controlled - client asks one DNS server that resolves the whole name iteratively to the client
+- recursive
+
+X.500 Directory service
+- Directory user agents (DUA)
+- Directory service agents (DSA)
+- name tree
+- provides read and search
+
+Slide 5 (File Systems)
+
+requirements
+- transparency
+- concurrent access
+- file replication
+- tolerate hardward and operating system heterogenity
+- security
+- fault tolerance
+- consistency
+- efficiency
+
+architecture
+- flat file server
+	- use unique file identifiers (UFID) to identify files
+	- RPC-based interface
+	- not used by application level programs
+- directory service
+	- map UFID to file name, both ways
+- client module
+	- API for application program
+
+Sun Network File System
+- access transparency
+	- no distinction b/w local and remote files
+	- virtual file system
+	- file handles
+- security
+	- transmitted via RPC
+	- can fake identity
+		- overcome by encryption
+
+mounting of file systems
+- RPC-based mount protocol
+- hard-mounted
+	- mostly used in practice
+	- user-level process suspended until operation completed
+	- application may not terminate gracefully in failure situations
+- soft-mounted
+	- error message returned to NFS client module to user-level process after small number of retries
+
+note: client needs to explicitly mount nested directories
+
+caching in Sun NFS
+- write operations has consistency problems
+- write-through caching
+	- completely write data to file before replying to client
+	- inefficient when write is frequent
+- commit operation
+	- store write changes in cache memory
+	- write to disk when commit
+
+client chaching in NFS
+	- cache read operations
+		- inconsistency handled by timestamp
+			- polling server
+			- based on freshness of cached object
+
+	- cache write operations
+		- mark modified cache page as dirty and schedule page to be flushed to server asynchronously
+	- asynchronous block input/output (bio) daemon
+		- read/write done by blocks
+		- spacial & temporal locality
+
+file sharing semantics
+- single processor - when a read follows a write, the return value of read is the value just written
+- distributed system - obsolete values may be returned
+
+4 ways of dealing with shared files in a distributed system:
+- unix semantics - every operation on a file is instantly visible to all processes
+- session semantics - no changes are visible to other processes until the file is closed
+- immutable files - no updates possible
+- transaction - all changes occur atomically
+
+Andrew File System (AFS)
+- infrequently updated shared files and local user files remain valid for long periods of time
+- large local disk cache establishes a working set
+	- assume small files
+	- reads more than writes
+	- sequential access
+	- user-locality (used by one user only)
+	- burstiness (temporal locality)
+- whole-file serving - transfer entire contents to client
+- whole-file caching - transfered file will be stored in the client's local disk
+- callback promises - ensures cached files are updated after a client calls close()
+- file update with one-copy update semantics is inefficient
+- does not support concurrent updates
