@@ -345,3 +345,180 @@ logical clock synchronization
 Lamport's algorithm
 - each process has a local counter, Li
 - each event e that occurs at process pi is assigned a Lamport timestamp Li(e)
+
+Global states
+- garbage collection
+- deadlocks
+- termination
+
+distributed snapshot
+- cut of system's execution
+- cut C is consistent iff for all e in Ci, f-> e => f in c
+
+distributed snapshot algorithm
+chandy-lamport snapshot recording algorithm
+- 
+TODO
+
+election problem
+- assumptions:
+	- each process has a unique number
+	- one process per machine
+	- each process knows the process number of every other machines
+	- processes do not know which processes are currently up and which ones are currently down
+- coordinator has the high process number
+
+the bully algorithm
+- a process P sends an ELECTION messages to all processes with higher numbers
+- if no one responds, P wins and becomes the coordinator
+- otherwise, P is done and isn't the coordinator
+- if a process receives an ELECTION message from a lower-number process, it replies ok and will take over the election
+
+ring algorithm
+- logically order processes in a ring
+- any process notices that cooridinator is not functioning sends an ELECTION message to its neighbour
+- neighbour pass the message with its process number attached to the list within the message
+- after a cycle is complete, the process circulates a COORDINATOR message
+
+Sharing in Distributed Systems
+- mutual exclusion problem
+- requirements:
+	- safety
+	- liveness
+	- order
+
+centralized algorithm
+- one process elected as coordinator
+- other processes ask coordinator for a lock
+- coordinator queue the lock requests and grant lock to the first of queue if lock is available
+
+- easy to implement
+- fair
+- no stavation
+- single point of failure
+
+distributed algorithm
+- based on total ordering of events
+- relies on timestamp
+- when a process enters critical region, send a message to all other processes
+- if other processes are not in the critical region, reply OK
+
+- n point of failures, higher probability of failure
+- process needs to include states
+- slower, more complicated, more expensive, and less robust then centralized algorithm
+
+token ring algorithm
+- process that holds the token can enter a critical region; others block
+- if the process no longer in critical region, it passes the token
+
+- guarantees mutual exclusion
+- no starvation
+- need to regenerate token if it is lost
+- recovery if a process crashes
+
+Transaction
+
+- characterization
+	- read set (RS)
+	- write set (WS)
+	- base set (BS = RS union WS)
+
+centralized transaction execution
+- user application
+- transaction manager
+- scheduler
+- recovery manager
+
+distributed transaction execution
+- user application
+- transaction manager - distributed transaction execution model, replica control protocol
+- scheduler - distributed concurrency control protocol
+- recovery manager - local recovery protocol
+
+properties of transactions
+
+Atomicity - all or nothing
+Conistency - correctness
+Isolation - serializability
+Durability - commited updates persist
+
+isolation problems
+- serializability
+- incomplete results
+	- anomalies
+		- lost updates
+		- inconsistent retrievals
+
+execution schedule
+- an order in which the operations of a set of transactions are executed
+
+serial history
+- conflict equivalence - the relative order of execution of the conflicting operations belonging to non-aborted transactions in two histories are the same
+
+conflicts
+- read-write
+- write-write
+
+
+Distributed Transaction Serializability
+
+- local histories
+- global history
+
+- for global history to be serializable
+	- each local history should be serializable
+	- 2 conflicting operations should be in the same relative order in all of the local historeis where they appear together
+
+Locking
+- read lock (shared lock)
+- write lock (exclusive lock)
+
+Two-phase locking (2PL)
+- phase 1: obtain locks
+- lock point: begin to release locks
+- phase 2: release locks
+
+strict 2PL
+- all locks must be released at once
+
+deadlock
+- wait-for graph
+	- if transaction Ti waits for another transaction Tj to release a lock on an entity, then Ti->Tj in WFG
+
+deadlock management
+- prevention
+- avoidance
+- detection and recovery
+
+distributed deadlock prevention
+- pass WFG to other sites
+
+timestamp ordering
+- transaction Ti
+- globally unique timestamp ts(Ti)
+- transaction manager attaches the timestamp to all operations issued by the transaction
+- each object has a write timestamp and a read time stamp
+- rts(x) = largest timestamp of any read on x
+- wts(x) = largest timestamp of any write on x
+- algorithm:
+	for Ri(x)
+		if ts(Ti) < wts(x)
+		then reject Ri(x)
+		else {
+			accept Ri(x)
+			rts(x) <- ts(Ti
+		}
+
+	for Wi(x)
+		if ts(Ti) < rts(x) or ts(Ti) < wts(x)
+		then reject Wi(x)
+		else {
+			accept Wi(x)
+			wts(x) <- ts(Ti)
+		}
+
+multiversion timestamp ordering
+- associate version with timestamp
+- Ri(x) becomes reading a version of x
+- Wi(x) generates a new version of x, as long as Rj(xr) has not yet been processed
+	ts(Ti) < ts(xr) < ts(Tj)
