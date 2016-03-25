@@ -282,3 +282,66 @@ Andrew File System (AFS)
 - callback promises - ensures cached files are updated after a client calls close()
 - file update with one-copy update semantics is inefficient
 - does not support concurrent updates
+
+Slide 6
+
+Clock synchronization
+- all processes need to agree on the order in which events occur
+- logical clocks
+- physical clocks (real time)
+
+- physical clock synchronization
+	- change in time - dt
+	- maximum drift rate - rho
+	- 2 clocks can be at most 2(rho)(dt) apart
+	- maximum time apart - delta
+	- needs to synchronize clock every (delta)/2/(rho)
+
+Christian's algorithm
+- one time server (WWV receiver) and all other machines synchronize with the time server
+- changes cannot be backward
+- apply propagation time (t1-t0-I)/2
+	- I - interrupt handling time
+
+Berkeley algorithm
+- time daemon polls every machine periodically
+- computes average time
+- tells other to advance clock or slow clock
+- time daemon's time is set manually by operator periodically
+
+Averaging algorithm
+- decentralized algorithm
+- divide time into fixed length intervals
+- T0 - an agreed upon moment in the past
+- R - a system parameter
+- ith interval is [T0+iR, T0+(i+1)R)
+- each machine broadcast its time at the start of an interval
+- compute the average
+	- discard highest and lowest time values
+
+Internet Network Time Protocol (NTP)
+- tree structure
+- nodes at lower depth (strata) synchronize with their parents
+- if a node fails, it degrades to the next strata
+- modes:
+	- multicast - periodically transmits time
+	- procedure call - similar to Christian's algorithm
+	- symmetric - used where high accuracy is needed
+
+synchronized clocks
+- at-most-once message delivery
+	- each message carries a connection ID and a timestamp
+	- server records the most-recent timestamp
+	- server rejects any connection with a lower timestamp stored for that connection
+	- periodically the current time is written to disk
+
+logical clock synchronization
+- happens-before relation (a->b)
+	- in same process: if a happens before b, then a->b
+	- in different processes: if 'a' is the event of a message, and 'b' is the event of the same message received by another process, then a->b
+	- in different processes: processes do not exchange message (i.e. neither a->b nor b->a), these events are concurrent a||b
+	- transitivity holds
+
+Lamport's algorithm
+- each process has a local counter, Li
+- each event e that occurs at process pi is assigned a Lamport timestamp Li(e)

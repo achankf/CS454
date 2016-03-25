@@ -1,0 +1,31 @@
+Idea: proof by induction on the number of message. Let $m$ be the number of messages.
+
+\begin{itemize}
+\item
+Case $m = 0$:
+In order to have $e \rightarrow e'$, the events must occur in the same process.
+Due to transitivity, there may exist $k \ge 0$ events (in the same process) in between $e$ and $e'$, so $C(e') = C(e) + k+1 > C(e)$.
+\item
+Case $m = 1$:
+This can only occur between 2 processes.
+Without loss of generality, assume $e$ occurs in process $p_1$ and $e'$ occurs in process $p_2$.
+Similar to case $m=0$, $p_1$ can have $k \ge 0$ events before sending the message, so the timestamp that is carried in the message is $t = C(e) + k$ (notice without the plus one).
+On the other hand, we don't care about the timestamp for $p_2$, so let's say it is $t'$; but we know that there may exists $k' \ge 0$ events in $p_2$ after receiving the message.
+Thus,
+\begin{align*}
+C(e') &= \max(t, t' + k') + 1 & \text{by definition} \\
+	&= \max(C(e) + k, t' + k') + 1 \\
+	&\ge \max(C(e), t') + 1 \\
+	&\ge C(e) + 1 \\
+	&> C(e) & \text{note: strictly greater than}
+\end{align*}
+\item
+Case $m = n$, for some $n > 1$:
+By simple counting arguments, there exists $n-1$ events $e_1, e_2, \cdots, e_{n-1}$ that receive messages within the chain of events.
+Since these events are in chains, by transitivity $e \rightarrow e_{n-1} \rightarrow e'$.
+By inductive hypothesis, $e \rightarrow e_{n-1}$ gives $C(e) < C(e_{n-1})$ for the $m = n-1$ case.
+By case $m = 1$, we have $C(e_{n-1}) < C(e')$.
+Together, the inequality becomes $C(e) < C(e_{n-1}) < C(e')$.
+\end{itemize}
+The punchline: therefore the statement holds.
+\done
