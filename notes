@@ -522,3 +522,87 @@ multiversion timestamp ordering
 - Ri(x) becomes reading a version of x
 - Wi(x) generates a new version of x, as long as Rj(xr) has not yet been processed
 	ts(Ti) < ts(xr) < ts(Tj)
+
+
+
+Slide 7 - replication
+
+- advantages: reliability and performance
+- disadvantages: replication transparency and consistency issues
+
+object replication
+- occur in the object level or in the middleware
+
+strict consistency
+- any read returns a value corrsponding to the result of the most recent write
+- relies on absolute global time
+
+linearizability
+- read and write by all processes were executed in some serial order and each process' operations maintain the order specified
+- timestamp based on real time
+
+sequential consistency
+- similar to linearizability but without timestamp
+- similar to serializability
+- processes -> switch -> merged operations
+- requires transaction
+
+Transactional replica consistency
+- one-copy serializabilty
+	- the effect of transactions performed by clients on replicated objects should be the same as if they had been performed one at-a-time on a single set of objects
+
+Client-centric consistency
+- eventual consistency
+- only requires guarantees that updates will be propagated
+
+- monotonic reads - read after reads; returns the same value or the most recent value
+- monotonic writes - write followed by writes; write will be completed before other writes
+- read your writes - effect of writes will always by seen by successive reads
+- write follow reads - read return the most recent value then do the write
+
+
+Replica placement
+- mirroring
+- push caches
+- client caches
+
+update propagation
+- propagate notifications, logs, update operations
+- server: push approach
+- client: pull approach
+- epidemic protocols: eventual consistency
+
+primary-based protocol
+
+primary copy remote-write protocol (primary stays in one location)
+- forward requests to primary
+- primary tells backups to update
+- backup ack update
+- reply client ack write complete
+
+primary copy local-write protocol (primary moves)
+- write request
+- move x to new primary
+- ack write complete to client
+- primary tell backups to update
+- backups ack update
+
+active replication
+- request is processed by all servers
+- enforce order:
+	- total ordered multicast
+	- lamport timestamps
+	- sequencer
+
+replicated invocations problem
+- client replicates invocation request
+- all replicas see the same invocation
+- object receives n invocation for n replica objects
+- solution: let a coordinator forward invocation request/reply
+
+quorum-based protocol
+- assign a vote to each copy of a replicated object such that sum(Vi) = V
+- each operation has to obtain a read quorum (Vr) to read and a write quorum (Vw) to write an object
+- the following must hold:
+	- Vr + Vw > V
+	- Vw > V/2
