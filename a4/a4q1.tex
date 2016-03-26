@@ -21,11 +21,10 @@ C(e') &= \max(t, t' + k') + 1 & \text{by definition} \\
 \end{align*}
 \item
 Case $m = n$, for some $n > 1$:
-By simple counting arguments, there exists $n-1$ events $e_1, e_2, \cdots, e_{n-1}$ that receive messages within the chain of events.
+By simple counting arguments, there exists $n$ events $e_1, e_2, \ldots, e_{n-1},e'$ that receive messages within the chain of events.
 Since these events are in chains, by transitivity $e \rightarrow e_{n-1} \rightarrow e'$.
 By inductive hypothesis, $e \rightarrow e_{n-1}$ gives $C(e) < C(e_{n-1})$ for the $m = n-1$ case.
 By case $m = 1$, we have $C(e_{n-1}) < C(e')$.
 Together, the inequality becomes $C(e) < C(e_{n-1}) < C(e')$.
 \end{itemize}
 The punchline: therefore the statement holds.
-\done

@@ -1,0 +1,6 @@
+Strict 2PL cannot generate the execution schedule.
+Consider $W_j(x)$ and $W_i(y)$.
+They are placed side-by-side in the execution table, so, by a similar reasoning for $R_i(y)$ and $R_j(x)$ in the assignment description,  the both $W_j(x)$ and $W_i(y)$ need to start at the same time.
+
+On the other hand, since each read is followed by a write of the same transaction, so transaction $i$ acquires 2 exclusive lock (and 2 read locks) on $x$ and $y$.
+This means $W_j(x)$ cannot run until $W_i(y)$ is complete, which is a contradiction.

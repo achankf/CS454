@@ -1,0 +1,12 @@
+Yes, timestamp ordering works.
+Using the same notation from the slides, let
+\begin{align*}
+wts(x) &= 0 \\
+wts(y) &= 0 \\
+rts(x) &= 0 \\
+rts(y) &= 0 \\
+ts(T_i) &= 1 \\
+ts(T_j) &= 2
+\end{align*}
+The reason this works because each site maintains one object and the local execution schedule is serial --- timestamp ordering won't reject the operations, since $ts(T_i) < ts(T_j)$ and all operations in $T_i$ happens before those of $T_j$.
+More importantly there is no blocking on the objects, so $W_i(x)$ and $W_j(y)$ can run in parallel, unlike 2-phase locking.

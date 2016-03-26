@@ -1,0 +1,16 @@
+Write quorum: $\{S_1, S_2\}$; read quorum: $\{S_1,S_3\}$
+
+This is partition is valid because the total number of votes (4) is greater than the number of servers (3), each server is part of a quorum, and the number of servers in the write quorum (2) is a majority (i.e.\ greater than 3/2).
+As for why this partition gives the best performance for client $C$, consider the following:
+\begin{itemize}
+\item
+For reading $x$:
+$S_1$ is in the write quorum, which means all write operations have to be done to both $S_1$ and $S_3$, so $S_1$ has the latest $x$.
+Being in the read quorum, the quorum algorithm will always suggest $S_1$ as a candidate, since it always has the latest copy of $x$.
+Thus, $S_1$ can always return its local copy to $C$;
+hence, read operations are optimal for client $C$.
+\item
+For writing $x$:
+Notice that 2 is the minimum number of votes needed to form a majority for 3 servers, so write operations cannot be faster than this.
+Moreover, since $S_1$ is in the write quorum, $C$ can transfer changes quickly to $S_1$.
+\end{itemize}
