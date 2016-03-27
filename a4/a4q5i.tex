@@ -1,0 +1,30 @@
+First, consider the coordinator:
+when the coordinator reboots, the coordinator should recover from the log for the following items:
+\begin{itemize}
+\item
+the fact that 2PC has begun --- this fact tells the coordinator from which point to continue
+\item
+a list of servers who responded with a vote --- the description implies that the coordinator could get some replies before it crashed, so some votes may have gotten into the log
+\end{itemize}
+Based on the logs, if at least one servers responded with NO, then log a \emph{global abort} entry and then send \emph{global abort} messages to the participants; recovery is complete and 2PC goes on as usual.
+Otherwise, resend \emph{prepare} messages to servers that the coordinator has not yet seen a reply; at this stage, recovery is complete.
+
+On the other hand, participants don't need to recovery anything and are waiting for messages that come from the coordinator.
+Waiting is ok because participants cannot continue without a coordinator anyways.
+There are 3 cases that participants wait for:
+\begin{itemize}
+\item
+The reply has not reached the coordinator.
+In this case, these participants receive a \emph{prepare} message, and they resend a YES/NO vote.
+Since the coordinator may fail repeatedly, these participants may wait and resend votes indefinitely until it is in the second case.
+\item
+The reply reaches the coordinator.
+In this case, participants do not receive any message until the election is complete.
+When the election is complete, all participants receives a \emph{global commit/abort} message, and is added to the logs.
+At this point, recovery is complete.
+\item
+The reply has not reached the coordinator, but some participants who voted NO do.
+Participants realize this if the coordinator sends a \emph{global abort} message.
+Of course, the message is logged.
+At this point, recovery is complete.
+\end{itemize}

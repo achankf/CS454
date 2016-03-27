@@ -606,3 +606,125 @@ quorum-based protocol
 - the following must hold:
 	- Vr + Vw > V
 	- Vw > V/2
+
+Fault Tolerance
+
+- reliability
+- availability
+- safety
+- maintainability
+
+- failure - deviation of a system from the behavior that is described in its specification
+- error - the part of state which is incorrect
+- fault - cause of an error
+
+- fault -> causes -> error -> results in -> failure
+
+- hard faults
+- soft faults
+
+Faults
+- permanant fault
+- incorrect design
+- unstable or marginal components
+- unstable environment
+- operator mistake
+
+Errors
+- permanant error
+- intermittent error
+- transient error
+
+Failures
+- System failures
+
+Failure models
+- crash failure
+- omission failure
+- timing failure
+- response failure
+- arbitrary failure
+
+Improve dependability
+- mask failures by redundancy
+	- information redundancy
+	- time redundancy
+	- physical redundancy
+- a design that does not require simultaneous functioning of a substantial number of critical components
+
+Hardware redundancy
+- 2 computers, one acts as standby
+
+Process redundancy
+- flat (cycled graph) vs hierarchical (tree)
+
+Management of replicated process
+- primary copy
+	- backups take over when primary failed
+	- hierarchical
+- replicated writes
+	- active replication and quorum-based protocols
+	- flat group
+	- no single point of failure
+
+k fault tolerence
+- a system can survive faults in k components and still meet its specs
+- safe failure requires k+1 processes
+- arbitrary failures require 2k+1 processes
+	- k failing processes can all generate the same result by chance
+	- assumes processes are independent
+	- processes gang up to produce wrong results -> General problem
+		- so in this case k+2k+1 = 3k+1 processes are needed
+	- assume communication failures do not occur
+
+
+Communication failures
+- point-to-point communication
+	- TCP sends ACK
+- RPC, RMI
+
+Network partitioning & replication
+- group of replica managers
+	- partitioned into two or more subgroups
+	- only members within a subgroup can communication with other members within the subgroup
+
+Replica management with network partitioning
+- optimistic approach
+	- available copies with validation
+		- let each partition perform updates freely
+		- validate when partition is repaired and those that violate one-copy serializability are aborted
+
+- pessimistic
+	- quorum-based
+	- reduce availability
+	- updates only occur in the partition that has a majority of the replica managers
+
+Quorum protocols for network partitioning
+- handled by commit protocol
+- each site has a vote Vi
+- total number of votes is V
+- abort quorum Va, commit quorum Vc
+- Va + Vc > V where Va >= 0, Vc <= V
+- before a transaction commits, must obtain a commit quorum Vc
+- similarly for aborts; need Va
+
+
+Transactional dependability
+- maintain atomicity and durability
+- focus is on data
+- failures that affect ACID
+	- transaction failures
+	- system (site) failures
+	- media failures
+	- communication failures
+
+Distribution reliability protocols
+- commit protocols
+- termination protocols
+- recovery protocols
+
+Two-phase commit (2PC)
+- phase 1: coordinator gets the participants to ready to commit their writes
+- phase 2: everybody commits
+- rules:
+	- coordinator aborts a transaction iff at least one participant votes to abort it
