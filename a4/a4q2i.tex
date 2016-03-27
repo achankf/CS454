@@ -1,6 +1,6 @@
 The executions are globally serializable.
-First, it is clear that local history on both sites are serializable, since transaction $i$ occurs before transaction $j$ for $x$ in site 1, and for $y$ in site 2;
+First, it is clear that local history on both sites are serializable, since operations in transaction $i$ occur before operations in transaction $j$ for $x$ in site 1, and for $y$ in site 2;
 hence, the first rule on the slide \#6-63 is satisfied.
 
-Then, each site has a read-write conflict (say, $R_i(x)$ and $W_i(x)$, similarly for $y$ on site 2) and a write-write conflict (say, $W_i(x)$ and $W_j(x)$).
-Both conflicts, on each site, imply a global serialization order of $T_i \rightarrow T_j$, so the second rule on slide \#6-63 holds.
+Then, each site has a read-write conflict (say, $R_i(x)$ and $W_i(x)$, similarly for $y$ on site 2) and a write-write conflict (say, $W_i(x)$ and $W_j(x)$, similarly for $y$).
+All conflicts on both site imply an ordering in the form $T_i \rightarrow T_j$, so the second rule on slide \#6-63 holds.

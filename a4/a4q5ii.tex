@@ -1,20 +1,20 @@
-For the coordinator, it should wait for one of the following two messages:
+For the coordinator, it should wait for one of the following two messages from the failed participants:
 \begin{itemize}
 \item
 \emph{prepared}:
 in this case, the coordinator knows that a participant has failed and has rebooted.
 Thus, the coordinator resends \emph{global commit/abort} and wait again.
-To avoid an infinite failure loop, the coordinator should keep track of the number of times a participant resend this message.
+To avoid infinite failure loops, the coordinator should keep track of the number of times a participant resend this message.
 I think the coordinator should force a global abort if the number reaches a limit (say, 10 times), because the participant probably has a big problem that require operators' intervention.
-Depending on the replication algorithm, I think the coordinator should tell that participant to shutdown until the issues become fixed, and new requests will be run without the participant.
+I think the coordinator should tell that participant to shutdown until the issues become fixed, and new requests will be run without the participant.
 \item
 If the coordinator receives a notification that a participant has completed the \emph{global commit/abort}, then the coordinator can proceed to the clean up stage.
 Recovery is complete.
 \end{itemize}
 
 For the participants:
-if the participant has failed many times in a row (i.e.\ needs operators' intervention), then it should be told by the coordinator to shutdown.
-Otherwise, it must read its logs and rewind to the previous 2PC states.
+if a participant has failed many times in a row (i.e.\ needs operators' intervention), then it should be told by the coordinator to shutdown.
+Otherwise, it must reboot to the last good 2PC states.
 That is, the participant should resend the YES/NO vote to the coordinator.
-Notice that the \emph{prepared} message must the same as the previous one before the participant failed, because the assignment description implies that the vote decision is recorded in the logs.
-Then, the participant should wait for \emph{global commit/abort} and the recovery is complete.
+Notice that the \emph{prepared} message must be the same as the previous one before the participant failed, because the decision was made before the failure, which was recorded in the logs.
+At this stage, recovery is complete and the participant should be waiting for a \emph{global commit/abort} message from the coordinator.

@@ -1,6 +1,6 @@
 First, consider the coordinator:
 when the coordinator reboots, the coordinator should recover a list of votes from servers that responded successfully.
-Based on the logs, if at least one servers responded with NO, then log a \emph{global abort} entry and then send \emph{global abort} messages to the participants; recovery is complete and 2PC goes on as usual.
+Based on the logs, if at least one server responded with a NO, then the coordinator sends \emph{global abort} messages to the participants; recovery is complete and 2PC goes on as usual.
 Otherwise, the coordinator resends \emph{prepare} messages to participants that are still missing votes; at this stage, recovery is complete.
 
 On the other hand, participants don't need to recovery anything and are waiting for messages that come from the coordinator.
@@ -13,11 +13,10 @@ Since the coordinator may fail repeatedly, these participants may wait and resen
 \item
 The reply reaches the coordinator.
 In this case, participants do not receive any message until the election is complete.
-When the election is complete, all participants receives a \emph{global commit/abort} message, and is added to the logs.
+When the election is complete, all participants receives a \emph{global commit/abort} message.
 At this point, recovery is complete.
 \item
 The reply has not reached the coordinator, but some participants who voted NO do.
 Participants realize this if the coordinator sends a \emph{global abort} message.
-Of course, the message is logged.
 At this point, recovery is complete.
 \end{itemize}

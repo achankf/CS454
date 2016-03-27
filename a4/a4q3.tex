@@ -7,7 +7,7 @@ As for why this partition gives the best performance for client $C$, consider th
 For reading $x$:
 $S_1$ is in the write quorum, which means all write operations have to be done to both $S_1$ and $S_3$, so $S_1$ has the latest $x$.
 Being in the read quorum, the quorum algorithm will always suggest $S_1$ as a candidate, since it always has the latest copy of $x$.
-Thus, $S_1$ can always return its local copy to $C$;
+Thus, $S_1$, a server local to $C$, can always return its copy to $C$;
 hence, read operations are optimal for client $C$.
 \item
 For writing $x$:

@@ -1,4 +1,4 @@
-Idea: proof by induction on the number of message. Let $m$ be the number of messages.
+Idea: proof by induction on the number of messages. Let $m$ be the number of messages.
 
 \begin{itemize}
 \item
@@ -9,7 +9,7 @@ Due to transitivity, there may exist $k \ge 0$ events (in the same process) in b
 Case $m = 1$:
 This can only occur between 2 processes.
 Without loss of generality, assume $e$ occurs in process $p_1$ and $e'$ occurs in process $p_2$.
-Similar to case $m=0$, $p_1$ can have $k \ge 0$ events before sending the message, so the timestamp that is carried in the message is $t = C(e) + k$ (notice without the plus one).
+Similar to case $m=0$, $p_1$ can have $k \ge 0$ events before sending the message, so the timestamp that is carried in the message is $t = C(e) + k$.
 On the other hand, we don't care about the timestamp for $p_2$, so let's say it is $t'$; but we know that there may exists $k' \ge 0$ events in $p_2$ after receiving the message.
 Thus,
 \begin{align*}
@@ -17,7 +17,7 @@ C(e') &= \max(t, t' + k') + 1 & \text{by definition} \\
 	&= \max(C(e) + k, t' + k') + 1 \\
 	&\ge \max(C(e), t') + 1 \\
 	&\ge C(e) + 1 \\
-	&> C(e) & \text{note: strictly greater than}
+	&> C(e)
 \end{align*}
 \item
 Case $m = n$, for some $n > 1$:
