@@ -4,17 +4,14 @@ For the coordinator, it should wait for one of the following two messages from t
 \emph{prepared}:
 in this case, the coordinator knows that a participant has failed and has rebooted.
 Thus, the coordinator resends \emph{global commit/abort} and wait again.
-To avoid infinite failure loops, the coordinator should keep track of the number of times a participant resend this message.
-I think the coordinator should force a global abort if the number reaches a limit (say, 10 times), because the participant probably has a big problem that require operators' intervention.
-I think the coordinator should tell that participant to shutdown until the issues become fixed, and new requests will be run without the participant.
+To avoid infinite failure loops, the coordinator should keep track of the number of times a participant resend this message, and the coordinator should send a global abort if a limit is reach (say, 10 times).
+Depending on whether the participant is a backup replica or not, I may consider to shut it down.
 \item
 If the coordinator receives a notification that a participant has completed the \emph{global commit/abort}, then the coordinator can proceed to the clean up stage.
 Recovery is complete.
 \end{itemize}
 
-For the participants:
-if a participant has failed many times in a row (i.e.\ needs operators' intervention), then it should be told by the coordinator to shutdown.
-Otherwise, it must reboot to the last good 2PC states.
+For the participants, it must reboot to the last good 2PC states.
 That is, the participant should resend the YES/NO vote to the coordinator.
-Notice that the \emph{prepared} message must be the same as the previous one before the participant failed, because the decision was made before the failure, which was recorded in the logs.
+Notice that the \emph{prepared} message must be the same as the previous one that was sent before failure, because the decision must be recorded in the logs before the failure.
 At this stage, recovery is complete and the participant should be waiting for a \emph{global commit/abort} message from the coordinator.

@@ -1,22 +1,22 @@
-First, consider the coordinator:
-when the coordinator reboots, the coordinator should recover a list of votes from servers that responded successfully.
-Based on the logs, if at least one server responded with a NO, then the coordinator sends \emph{global abort} messages to the participants; recovery is complete and 2PC goes on as usual.
-Otherwise, the coordinator resends \emph{prepare} messages to participants that are still missing votes; at this stage, recovery is complete.
+First, consider the coordinator.
+The coordinator reboots from the logs.
+Since the coordinator does not know whether all participants have replied, it should resend \emph{prepare} messages to all participants, and recovery is complete.
 
-On the other hand, participants don't need to recovery anything and are waiting for messages that come from the coordinator.
+On the other hand, participants don't need to recovery anything.
+They wait for messages that come from the coordinator.
 There are 3 cases that participants wait for:
 \begin{itemize}
 \item
-The reply has not reached the coordinator.
-In this case, these participants receive a \emph{prepare} message, and they resend a YES/NO vote.
-Since the coordinator may fail repeatedly, these participants may wait and resend votes indefinitely until it is in the second case.
+The reply has not reached the coordinator, or the reply has reached but the coordinator fails again.
+In this case, participants receive a \emph{prepare} message, and they resend a YES/NO vote, and then they repeat the waiting process again until the coordinator receives all votes.
+Since the question description says the coordinator must be part of every transaction, waiting indefinitely is ok.
 \item
-The reply reaches the coordinator.
-In this case, participants do not receive any message until the election is complete.
-When the election is complete, all participants receives a \emph{global commit/abort} message.
+The coordinator has received all votes.
+All participants receives a \emph{global commit/abort} message from the coordinator.
 At this point, recovery is complete.
 \item
 The reply has not reached the coordinator, but some participants who voted NO do.
-Participants realize this if the coordinator sends a \emph{global abort} message.
+Since the transaction is all-or-nothing, the coordinator has enough information to call a \emph{global abort}.
+Participants realize this because they wait for either \emph{prepare} or \emph{global commit/abort}.
 At this point, recovery is complete.
 \end{itemize}

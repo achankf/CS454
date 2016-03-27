@@ -12,5 +12,6 @@ hence, read operations are optimal for client $C$.
 \item
 For writing $x$:
 Notice that 2 is the minimum number of votes needed to form a majority for 3 servers, so write operations cannot be faster than this.
+In particular, adding more servers in the write quorum will be translated into more write operations, since these servers need to be up-to-date.
 Moreover, since $S_1$ is in the write quorum, $C$ can transfer changes quickly to $S_1$.
 \end{itemize}

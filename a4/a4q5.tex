@@ -1,4 +1,5 @@
-The following responses assume the coordinator and the participants each keep a write-ahead log for each request/acknowledgement.
+The following responses assume the coordinator and the participants each keep a write-ahead log for every requests/acknowledgements.
+I assume operations that update the logs never fail.
 
 Note: when I say ``reboot,'' I mean the program is able to use the logs to ``rewind'' to the last good state, not neccessarily, though possible, rebooting the process nor the physical machine.
 \begin{enumerate}[1]

@@ -8,5 +8,5 @@ rts(y) &= 0 \\
 ts(T_i) &= 1 \\
 ts(T_j) &= 2
 \end{align*}
-The reason this works because each site maintains one object and the local execution schedule is serial --- timestamp ordering won't reject the operations, since $ts(T_i) < ts(T_j)$ and all operations in $T_i$ happens before those of $T_j$ (i.e.\ the timestamp of the transactions are always greater or equal to the ``current'' value of $wts$ and $rts$).
+Timestamp ordering algorithm won't reject the operations, since $ts(T_i) < ts(T_j)$ and all operations in $T_i$ happens before those of $T_j$ (i.e.\ the timestamp of the transactions are always greater or equal to the ``current'' value of $wts$ and $rts$).
 More importantly there is no blocking on the objects, so $W_i(x)$ and $W_j(y)$ can run in parallel, unlike 2-phase locking.
