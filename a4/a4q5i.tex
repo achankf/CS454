@@ -1,16 +1,9 @@
 First, consider the coordinator:
-when the coordinator reboots, the coordinator should recover from the log for the following items:
-\begin{itemize}
-\item
-the fact that 2PC has begun --- this fact tells the coordinator from which point to continue
-\item
-a list of servers who responded with a vote --- the description implies that the coordinator could get some replies before it crashed, so some votes may have gotten into the log
-\end{itemize}
+when the coordinator reboots, the coordinator should recover a list of votes from servers that responded successfully.
 Based on the logs, if at least one servers responded with NO, then log a \emph{global abort} entry and then send \emph{global abort} messages to the participants; recovery is complete and 2PC goes on as usual.
-Otherwise, resend \emph{prepare} messages to servers that the coordinator has not yet seen a reply; at this stage, recovery is complete.
+Otherwise, the coordinator resends \emph{prepare} messages to participants that are still missing votes; at this stage, recovery is complete.
 
 On the other hand, participants don't need to recovery anything and are waiting for messages that come from the coordinator.
-Waiting is ok because participants cannot continue without a coordinator anyways.
 There are 3 cases that participants wait for:
 \begin{itemize}
 \item
